@@ -53,3 +53,50 @@ credentials/
 *.json
 !example-*.json
 
+# Sensitive configuration files
+config.json
+secrets.json
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+
+# API keys and secrets
+*_secret*
+*_private*
+api_keys.txt
+secrets.txt
+
+# Google Service Account files
+*-service-account*.json
+service-account*.json
+*-credentials.json
+
+# Password files
+passwords.txt
+*.passwd
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs with potential sensitive data
+*.log
+logs/
+
+# Streamlit secrets directory
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# Any file with sensitive in name
+*sensitive*
+*confidential*
+

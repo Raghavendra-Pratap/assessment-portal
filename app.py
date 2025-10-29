@@ -49,42 +49,18 @@ def main():
     if 'page' not in st.session_state:
         st.session_state.page = 'dashboard'
     
-    # Sidebar navigation
+    # Top navigation bar
     if check_auth():
-        with st.sidebar:
-            st.title("📊 Excel Assessment Pro")
-            st.divider()
-            
-            if st.button("🏠 Dashboard", use_container_width=True, 
-                        type="primary" if st.session_state.page == 'dashboard' else "secondary"):
-                st.session_state.page = 'dashboard'
-            
-            if st.button("📝 Assessments", use_container_width=True,
-                        type="primary" if st.session_state.page == 'assessments' else "secondary"):
-                st.session_state.page = 'assessments'
-            
-            if st.button("👥 Sessions", use_container_width=True,
-                        type="primary" if st.session_state.page == 'sessions' else "secondary"):
-                st.session_state.page = 'sessions'
-            
-            if st.button("⚙️ Settings", use_container_width=True,
-                        type="primary" if st.session_state.page == 'settings' else "secondary"):
-                st.session_state.page = 'settings'
-            
-            st.divider()
-            
-            if st.button("🚪 Logout", use_container_width=True):
-                st.session_state.authenticated = False
-                st.session_state.user = None
-                st.session_state.page = 'login'
-                st.rerun()
+        from src.components.navbar import render_navbar
+        render_navbar()
         
         # Render selected page
         if st.session_state.page == 'dashboard':
             admin_dashboard.render()
         elif st.session_state.page == 'assessments':
             admin_assessments.render()
-        elif st.session_state.page == 'sessions':
+        elif st.session_state.page == 'candidates':
+            # For now, redirect to sessions - we'll create candidates page later
             admin_sessions.render()
         elif st.session_state.page == 'settings':
             admin_settings.render()

@@ -46,15 +46,25 @@ def init_session_state():
         st.session_state.page = 'dashboard'
 
 def create_default_admin():
-    """Create default admin user if none exists"""
+    """
+    Create default admin user if none exists.
+    
+    WARNING: Default credentials are for initial setup only.
+    Change the password immediately after first login!
+    
+    Default credentials:
+    - Email: admin@example.com
+    - Password: admin123
+    """
     db = SessionLocal()
     try:
         admin = db.query(Recruiter).filter(Recruiter.email == 'admin@example.com').first()
         if not admin:
-            from src.utils.auth import hash_password
+            # SECURITY NOTE: This is a weak default password for initial setup only
+            # Users MUST change this after first login
             admin = Recruiter(
                 email='admin@example.com',
-                password_hash=hash_password('admin123'),
+                password_hash=hash_password('admin123'),  # TODO: Change immediately after setup!
                 name='Admin User',
                 company='Excel Assessment Pro',
                 dashboard_slug='admin'

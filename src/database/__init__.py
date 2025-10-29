@@ -143,7 +143,7 @@ class MonitoringEvent(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     data = Column(JSON)
     severity = Column(String(20), default='low')  # low, medium, high
-    metadata = Column(Text)
+    event_metadata = Column('metadata', Text)  # Column name in DB is 'metadata', but attribute is 'event_metadata' to avoid conflict
 
 # Configure the relationship on Session after MonitoringEvent is fully defined
 # This breaks the circular dependency that causes InvalidRequestError in SQLAlchemy 2.0+

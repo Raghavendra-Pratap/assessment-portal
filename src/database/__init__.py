@@ -1,8 +1,7 @@
 """Database initialization and models"""
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 import os
 
@@ -117,7 +116,7 @@ class Session(Base):
     
     assessment = relationship("Assessment", back_populates="sessions", lazy="select")
     responses = relationship("Response", back_populates="session", cascade="all, delete-orphan", lazy="select")
-    monitoring_events = relationship("MonitoringEvent", back_populates="session", cascade="all, delete-orphan", lazy="select")
+    # monitoring_events relationship moved after MonitoringEvent class definition
 
 class Response(Base):
     __tablename__ = 'responses'
@@ -145,6 +144,23 @@ class MonitoringEvent(Base):
     data = Column(JSON)
     severity = Column(String(20), default='low')  # low, medium, high
     metadata = Column(Text)
-    
-    session = relationship("Session", back_populates="monitoring_events", lazy="select")
+
+# Configure bidirectional relationship after both classes are defined
+# This avoids circular reference errors in SQLAlchemy 2.0+
+# Using post-definition assignment to break circular dependency
+Session.monitoring_events = relationship(
+    "MonitoringEvent",
+    foreign_keys=[MonitoringEvent.session_id],
+    back_populates="session",
+    cascade="all, delete-orphan",
+    lazy="select"
+)
+
+# Update MonitoringEvent.session to complete the bidirectional relationship
+setattr(MonitoringEvent, 'session', relationship(
+    "Session",
+    foreign_keys=[MonitoringEvent.session_id],
+    back_populates="monitoring_events",
+    lazy="select"
+))
 

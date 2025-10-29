@@ -46,7 +46,7 @@ class Recruiter(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
     
-    assessments = relationship("Assessment", back_populates="recruiter")
+    assessments = relationship("Assessment", back_populates="recruiter", lazy="select")
 
 class Assessment(Base):
     __tablename__ = 'assessments'
@@ -60,10 +60,10 @@ class Assessment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    recruiter = relationship("Recruiter", back_populates="assessments")
-    questions = relationship("Question", back_populates="assessment", cascade="all, delete-orphan")
-    sessions = relationship("Session", back_populates="assessment", cascade="all, delete-orphan")
-    invitations = relationship("Invitation", back_populates="assessment", cascade="all, delete-orphan")
+    recruiter = relationship("Recruiter", back_populates="assessments", lazy="select")
+    questions = relationship("Question", back_populates="assessment", cascade="all, delete-orphan", lazy="select")
+    sessions = relationship("Session", back_populates="assessment", cascade="all, delete-orphan", lazy="select")
+    invitations = relationship("Invitation", back_populates="assessment", cascade="all, delete-orphan", lazy="select")
 
 class Question(Base):
     __tablename__ = 'questions'
@@ -79,8 +79,8 @@ class Question(Base):
     section_name = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    assessment = relationship("Assessment", back_populates="questions")
-    responses = relationship("Response", back_populates="question", cascade="all, delete-orphan")
+    assessment = relationship("Assessment", back_populates="questions", lazy="select")
+    responses = relationship("Response", back_populates="question", cascade="all, delete-orphan", lazy="select")
 
 class Invitation(Base):
     __tablename__ = 'invitations'
@@ -97,7 +97,7 @@ class Invitation(Base):
     completed_at = Column(DateTime, nullable=True)
     google_email = Column(String(255), default='')
     
-    assessment = relationship("Assessment", back_populates="invitations")
+    assessment = relationship("Assessment", back_populates="invitations", lazy="select")
 
 class Session(Base):
     __tablename__ = 'sessions'
@@ -115,9 +115,9 @@ class Session(Base):
     final_score = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    assessment = relationship("Assessment", back_populates="sessions")
-    responses = relationship("Response", back_populates="session", cascade="all, delete-orphan")
-    monitoring_events = relationship("MonitoringEvent", back_populates="session", cascade="all, delete-orphan")
+    assessment = relationship("Assessment", back_populates="sessions", lazy="select")
+    responses = relationship("Response", back_populates="session", cascade="all, delete-orphan", lazy="select")
+    monitoring_events = relationship("MonitoringEvent", back_populates="session", cascade="all, delete-orphan", lazy="select")
 
 class Response(Base):
     __tablename__ = 'responses'
@@ -132,8 +132,8 @@ class Response(Base):
     graded_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    session = relationship("Session", back_populates="responses")
-    question = relationship("Question", back_populates="responses")
+    session = relationship("Session", back_populates="responses", lazy="select")
+    question = relationship("Question", back_populates="responses", lazy="select")
 
 class MonitoringEvent(Base):
     __tablename__ = 'monitoring_events'
@@ -146,5 +146,5 @@ class MonitoringEvent(Base):
     severity = Column(String(20), default='low')  # low, medium, high
     metadata = Column(Text)
     
-    session = relationship("Session", back_populates="monitoring_events")
+    session = relationship("Session", back_populates="monitoring_events", lazy="select")
 

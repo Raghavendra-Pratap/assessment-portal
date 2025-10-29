@@ -21,6 +21,10 @@ A comprehensive Streamlit application that replicates the functionality of the E
 - 🎨 **Custom Branding** - Customize colors and branding for recruiters
 - ⚙️ **Settings Management** - Configure Google Sheets API and other settings
 
+## Repository
+
+**GitHub:** [https://github.com/Raghavendra-Pratap/assessment-portal](https://github.com/Raghavendra-Pratap/assessment-portal)
+
 ## Installation
 
 ### Prerequisites
@@ -32,8 +36,8 @@ A comprehensive Streamlit application that replicates the functionality of the E
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd excel-assessment-streamlit
+   git clone https://github.com/Raghavendra-Pratap/assessment-portal.git
+   cd assessment-portal
    ```
 
 2. **Create virtual environment**

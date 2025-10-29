@@ -36,54 +36,67 @@ def render():
         
         st.divider()
         
-        # Google Sheets API Configuration
-        st.subheader("Google Sheets API Configuration")
+        # Google Sheets API Configuration - ONLY for admins or if using global config
+        from src.utils.admin_auth import is_admin_user
+        user_is_admin = is_admin_user(st.session_state.get('user'))
         
         storage_config = recruiter.storage_config or {}
-        google_service_account = storage_config.get('google_service_account', '')
+        use_global_config = storage_config.get('use_global_config', False)
         
-        google_json = st.text_area(
-            "Google Service Account JSON",
-            value=google_service_account,
-            height=200,
-            placeholder='{"type": "service_account", "project_id": "...", ...}'
-        )
-        
-        if st.button("Save Google Sheets Config", use_container_width=True):
-            try:
-                # Validate JSON
-                if google_json:
-                    json.loads(google_json)
-                
-                if not storage_config:
-                    storage_config = {}
-                
-                storage_config['google_service_account'] = google_json
-                recruiter.storage_config = storage_config
-                
-                db.commit()
-                
-                # Update session state
-                if 'settings' not in st.session_state:
-                    st.session_state.settings = {}
-                st.session_state.settings['google_service_account'] = google_json
-                
-                st.success("Google Sheets API configuration saved!")
-            except json.JSONDecodeError:
-                st.error("Invalid JSON format!")
-        
-        # Test connection
-        if google_json:
-            if st.button("Test Connection"):
-                from src.services.google_sheets import GoogleSheetsAPI
+        if user_is_admin or not use_global_config:
+            # Show Google Sheets config only for admins or if not using global config
+            st.subheader("Google Sheets API Configuration")
+            
+            if use_global_config:
+                st.info("ℹ️ You are currently using the global Google Sheets API configuration. Contact an admin to change this.")
+            
+            google_service_account = storage_config.get('google_service_account', '')
+            
+            google_json = st.text_area(
+                "Google Service Account JSON",
+                value=google_service_account,
+                height=200,
+                placeholder='{"type": "service_account", "project_id": "...", ...}'
+            )
+            
+            if st.button("Save Google Sheets Config", use_container_width=True):
                 try:
-                    service = GoogleSheetsAPI(google_json)
-                    if service.service:
-                        st.success("✅ Google Sheets API connection successful!")
-                    else:
-                        st.error("❌ Failed to initialize Google Sheets API")
-                except Exception as e:
-                    st.error(f"❌ Connection error: {str(e)}")
+                    # Validate JSON
+                    if google_json:
+                        json.loads(google_json)
+                    
+                    if not storage_config:
+                        storage_config = {}
+                    
+                    storage_config['google_service_account'] = google_json
+                    storage_config['use_global_config'] = False
+                    recruiter.storage_config = storage_config
+                    
+                    db.commit()
+                    
+                    # Update session state
+                    if 'settings' not in st.session_state:
+                        st.session_state.settings = {}
+                    st.session_state.settings['google_service_account'] = google_json
+                    
+                    st.success("Google Sheets API configuration saved!")
+                except json.JSONDecodeError:
+                    st.error("Invalid JSON format!")
+            
+            # Test connection
+            if google_json:
+                if st.button("Test Connection"):
+                    from src.services.google_sheets import GoogleSheetsAPI
+                    try:
+                        service = GoogleSheetsAPI(google_json)
+                        if service.service:
+                            st.success("✅ Google Sheets API connection successful!")
+                        else:
+                            st.error("❌ Failed to initialize Google Sheets API")
+                    except Exception as e:
+                        st.error(f"❌ Connection error: {str(e)}")
+        else:
+            st.info("ℹ️ Google Sheets API is configured globally by the system admin. Please contact an administrator for changes.")
         
         st.divider()
         

@@ -45,17 +45,38 @@ def main():
         candidate_assessment.render()
         return
     
+    # Secret admin panel route - check URL parameter or special path
+    if 'admin_panel' in query_params or query_params.get('page') == 'admin_panel':
+        from src.utils.admin_auth import check_admin_access
+        if check_admin_access():
+            import pages.admin_panel as admin_panel
+            admin_panel.render()
+            return
+        else:
+            st.error("🚫 Access Denied: Admin privileges required")
+            show_login()
+            return
+    
     # Admin routes
     if 'page' not in st.session_state:
         st.session_state.page = 'dashboard'
     
     # Top navigation bar
     if check_auth():
+        from src.utils.admin_auth import is_admin_user
         from src.components.navbar import render_navbar
-        render_navbar()
+        
+        # Check if user is admin
+        user_is_admin = is_admin_user(st.session_state.get('user'))
+        
+        # Render navbar (will show admin panel link if admin)
+        render_navbar(user_is_admin)
         
         # Render selected page
-        if st.session_state.page == 'dashboard':
+        if st.session_state.page == 'admin_panel':
+            import pages.admin_panel as admin_panel
+            admin_panel.render()
+        elif st.session_state.page == 'dashboard':
             admin_dashboard.render()
         elif st.session_state.page == 'assessments':
             admin_assessments.render()

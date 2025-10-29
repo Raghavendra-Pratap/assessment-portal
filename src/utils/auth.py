@@ -67,11 +67,17 @@ def create_default_admin():
                 password_hash=hash_password('admin123'),  # TODO: Change immediately after setup!
                 name='Admin User',
                 company='Excel Assessment Pro',
-                dashboard_slug='admin'
+                dashboard_slug='admin',
+                is_admin=True  # Mark as admin
             )
             db.add(admin)
             db.commit()
             return True
+        else:
+            # Update existing admin user to ensure is_admin is True
+            if not admin.is_admin:
+                admin.is_admin = True
+                db.commit()
         return False
     finally:
         db.close()

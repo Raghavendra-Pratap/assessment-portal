@@ -42,6 +42,7 @@ class Recruiter(Base):
     branding_settings = Column(JSON, default={})
     storage_config = Column(JSON, default={})
     status = Column(String(20), default='active')
+    is_admin = Column(Boolean, default=False)  # Admin flag - only admins can access admin panel
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
     

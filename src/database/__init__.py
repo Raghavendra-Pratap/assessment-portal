@@ -145,9 +145,11 @@ class MonitoringEvent(Base):
     severity = Column(String(20), default='low')  # low, medium, high
     metadata = Column(Text)
 
-# Configure bidirectional relationship after both classes are defined
-# This avoids circular reference errors in SQLAlchemy 2.0+
-# Using post-definition assignment to break circular dependency
+# Configure the relationship on Session after MonitoringEvent is fully defined
+# This breaks the circular dependency that causes InvalidRequestError in SQLAlchemy 2.0+
+from sqlalchemy.orm import configure_mappers
+
+# Add the relationship attribute to Session after MonitoringEvent is defined
 Session.monitoring_events = relationship(
     "MonitoringEvent",
     foreign_keys=[MonitoringEvent.session_id],
@@ -156,11 +158,14 @@ Session.monitoring_events = relationship(
     lazy="select"
 )
 
-# Update MonitoringEvent.session to complete the bidirectional relationship
-setattr(MonitoringEvent, 'session', relationship(
+# Add the relationship attribute to MonitoringEvent  
+MonitoringEvent.session = relationship(
     "Session",
     foreign_keys=[MonitoringEvent.session_id],
     back_populates="monitoring_events",
     lazy="select"
-))
+)
+
+# Configure all mappers now that all relationships are defined
+configure_mappers()
 

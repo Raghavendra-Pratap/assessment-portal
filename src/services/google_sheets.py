@@ -1,0 +1,177 @@
+"""Google Sheets API integration"""
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import json
+import re
+
+class GoogleSheetsAPI:
+    def __init__(self, credentials_json=None):
+        """Initialize Google Sheets API client"""
+        self.credentials_json = credentials_json
+        self.service = None
+        self.drive_service = None
+        self._initialize_service()
+    
+    def _initialize_service(self):
+        """Initialize Google API services"""
+        if self.credentials_json:
+            try:
+                creds_dict = json.loads(self.credentials_json) if isinstance(self.credentials_json, str) else self.credentials_json
+                credentials = service_account.Credentials.from_service_account_info(
+                    creds_dict,
+                    scopes=[
+                        'https://www.googleapis.com/auth/spreadsheets',
+                        'https://www.googleapis.com/auth/drive'
+                    ]
+                )
+                
+                self.service = build('sheets', 'v4', credentials=credentials)
+                self.drive_service = build('drive', 'v3', credentials=credentials)
+            except Exception as e:
+                try:
+                    import streamlit as st
+                    st.error(f"Error initializing Google Sheets API: {str(e)}")
+                except:
+                    print(f"Error initializing Google Sheets API: {str(e)}")
+    
+    def extract_sheet_id(self, url: str) -> str:
+        """Extract sheet ID from Google Sheets URL"""
+        pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
+        match = re.search(pattern, url)
+        return match.group(1) if match else None
+    
+    def copy_sheet(self, source_sheet_id: str, title: str, share_with_email: str = None) -> dict:
+        """Copy a Google Sheet and optionally share with a user"""
+        if not self.drive_service:
+            return {'success': False, 'error': 'Drive service not initialized'}
+        
+        try:
+            # Copy the file
+            copied_file = self.drive_service.files().copy(
+                fileId=source_sheet_id,
+                body={'name': title}
+            ).execute()
+            
+            new_sheet_id = copied_file['id']
+            
+            # Share with email if provided
+            if share_with_email:
+                permission = {
+                    'type': 'user',
+                    'role': 'writer',
+                    'emailAddress': share_with_email
+                }
+                self.drive_service.permissions().create(
+                    fileId=new_sheet_id,
+                    body=permission
+                ).execute()
+            
+            return {
+                'success': True,
+                'sheet_id': new_sheet_id,
+                'url': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}"
+            }
+        except HttpError as e:
+            return {'success': False, 'error': str(e)}
+    
+    def get_sheet_values(self, sheet_id: str, range_name: str = 'A1:Z1000'):
+        """Get values from a sheet"""
+        if not self.service:
+            return None
+        
+        try:
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=sheet_id,
+                range=range_name
+            ).execute()
+            return result.get('values', [])
+        except HttpError as e:
+            return None
+    
+    def get_sheet_with_formulas(self, sheet_id: str):
+        """Get sheet data including formulas"""
+        if not self.service:
+            return None
+        
+        try:
+            result = self.service.spreadsheets().get(
+                spreadsheetId=sheet_id,
+                includeGridData=True
+            ).execute()
+            
+            sheet_data = {}
+            for sheet in result.get('sheets', []):
+                sheet_title = sheet['properties']['title']
+                sheet_data[sheet_title] = {}
+                
+                for row_data in sheet.get('data', [{}])[0].get('rowData', []):
+                    for cell_data in row_data.get('values', []):
+                        cell_ref = self._get_cell_reference(
+                            row_data.get('startRow', 0),
+                            cell_data.get('startColumn', 0)
+                        )
+                        
+                        if 'userEnteredValue' in cell_data:
+                            entered_value = cell_data['userEnteredValue']
+                            if 'formulaValue' in entered_value:
+                                sheet_data[sheet_title][cell_ref] = {
+                                    'type': 'formula',
+                                    'value': entered_value['formulaValue']
+                                }
+                            elif 'numberValue' in entered_value:
+                                sheet_data[sheet_title][cell_ref] = {
+                                    'type': 'number',
+                                    'value': entered_value['numberValue']
+                                }
+                            elif 'stringValue' in entered_value:
+                                sheet_data[sheet_title][cell_ref] = {
+                                    'type': 'string',
+                                    'value': entered_value['stringValue']
+                                }
+            
+            return sheet_data
+        except HttpError as e:
+            return None
+    
+    def _get_cell_reference(self, row: int, col: int) -> str:
+        """Convert row/col indices to cell reference (e.g., A1, B2)"""
+        col_letter = chr(65 + col % 26)
+        if col >= 26:
+            col_letter = chr(64 + col // 26) + col_letter
+        return f"{col_letter}{row + 1}"
+
+def get_google_sheets_service():
+    """Get Google Sheets service from session state"""
+    try:
+        import streamlit as st
+        if 'google_sheets_service' not in st.session_state:
+            settings = st.session_state.get('settings', {})
+            credentials = settings.get('google_service_account', '')
+            if credentials:
+                st.session_state.google_sheets_service = GoogleSheetsAPI(credentials)
+            else:
+                # Try to get from database
+                from src.database import SessionLocal, Recruiter
+                if st.session_state.get('user'):
+                    db = SessionLocal()
+                    try:
+                        user_id = st.session_state.user['id']
+                        recruiter = db.query(Recruiter).filter(Recruiter.id == user_id).first()
+                        if recruiter and recruiter.storage_config:
+                            creds = recruiter.storage_config.get('google_service_account', '')
+                            if creds:
+                                st.session_state.google_sheets_service = GoogleSheetsAPI(creds)
+                            else:
+                                st.session_state.google_sheets_service = None
+                        else:
+                            st.session_state.google_sheets_service = None
+                    finally:
+                        db.close()
+                else:
+                    st.session_state.google_sheets_service = None
+        return st.session_state.google_sheets_service
+    except:
+        return None
+

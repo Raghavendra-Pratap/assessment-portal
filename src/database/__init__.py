@@ -25,21 +25,28 @@ def init_db():
     # Then run migrations for existing databases
     try:
         with engine.connect() as conn:
-            # Check if recruiters table exists and get its structure
-            result = conn.execute("PRAGMA table_info(recruiters)")
+            # Use SQLAlchemy 2.0 API for executing raw SQL reliably
+            # 1) Inspect existing columns on recruiters
+            result = conn.exec_driver_sql("PRAGMA table_info(recruiters)")
             columns = [row[1] for row in result.fetchall()]
-            
-            # Add is_admin column if it doesn't exist
+
+            # 2) Add is_admin if missing
             if 'is_admin' not in columns:
-                conn.execute("ALTER TABLE recruiters ADD COLUMN is_admin BOOLEAN DEFAULT 0")
-                conn.commit()
-                print("✅ Added is_admin column to recruiters table")
+                try:
+                    conn.exec_driver_sql("ALTER TABLE recruiters ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+                    print("✅ Added is_admin column to recruiters table")
+                except Exception as alter_err:
+                    # If the column already exists due to race or prior manual migration, ignore
+                    print(f"ℹ️ is_admin column migration note: {alter_err}")
+
+            # 3) Ensure default admin (if present already) is marked admin
+            try:
+                conn.exec_driver_sql("UPDATE recruiters SET is_admin = 1 WHERE email = 'admin@example.com'")
+            except Exception as update_err:
+                print(f"ℹ️ is_admin update note: {update_err}")
             
-            # Update existing admin user to have is_admin=True
-            conn.execute("UPDATE recruiters SET is_admin = 1 WHERE email = 'admin@example.com'")
             conn.commit()
-            print("✅ Updated admin user permissions")
-            
+            print("✅ Migration complete")
     except Exception as e:
         print(f"⚠️ Migration warning: {e}")
         # Continue anyway - the app should still work

@@ -20,6 +20,22 @@ SessionLocal = sessionmaker(bind=engine)
 def init_db():
     """Initialize database tables"""
     Base.metadata.create_all(bind=engine)
+    
+    # Add missing columns to existing tables (migration)
+    try:
+        with engine.connect() as conn:
+            # Check if is_admin column exists in recruiters table
+            result = conn.execute("PRAGMA table_info(recruiters)")
+            columns = [row[1] for row in result.fetchall()]
+            
+            if 'is_admin' not in columns:
+                # Add is_admin column
+                conn.execute("ALTER TABLE recruiters ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+                conn.commit()
+                print("Added is_admin column to recruiters table")
+    except Exception as e:
+        print(f"Migration warning: {e}")
+        # Continue anyway - the column might already exist
 
 def get_db():
     """Get database session"""

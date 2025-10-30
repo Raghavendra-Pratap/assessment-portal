@@ -16,6 +16,8 @@ import pages.admin_dashboard as admin_dashboard
 import pages.admin_assessments as admin_assessments
 import pages.admin_sessions as admin_sessions
 import pages.admin_settings as admin_settings
+import pages.admin_panel as admin_panel
+import pages.recruiter_settings as recruiter_settings
 import pages.candidate_assessment as candidate_assessment
 
 # Page configuration
@@ -45,38 +47,17 @@ def main():
         candidate_assessment.render()
         return
     
-    # Secret admin panel route - check URL parameter or special path
-    if 'admin_panel' in query_params or query_params.get('page') == 'admin_panel':
-        from src.utils.admin_auth import check_admin_access
-        if check_admin_access():
-            import pages.admin_panel as admin_panel
-            admin_panel.render()
-            return
-        else:
-            st.error("🚫 Access Denied: Admin privileges required")
-            show_login()
-            return
-    
     # Admin routes
     if 'page' not in st.session_state:
         st.session_state.page = 'dashboard'
     
     # Top navigation bar
     if check_auth():
-        from src.utils.admin_auth import is_admin_user
         from src.components.navbar import render_navbar
+        render_navbar()
         
-        # Check if user is admin
-        user_is_admin = is_admin_user(st.session_state.get('user'))
-        
-        # Render navbar (will show admin panel link if admin)
-        render_navbar(user_is_admin)
-        
-        # Render selected page
-        if st.session_state.page == 'admin_panel':
-            import pages.admin_panel as admin_panel
-            admin_panel.render()
-        elif st.session_state.page == 'dashboard':
+        # Render selected page based on user role
+        if st.session_state.page == 'dashboard':
             admin_dashboard.render()
         elif st.session_state.page == 'assessments':
             admin_assessments.render()
@@ -84,7 +65,23 @@ def main():
             # For now, redirect to sessions - we'll create candidates page later
             admin_sessions.render()
         elif st.session_state.page == 'settings':
-            admin_settings.render()
+            # Show different settings based on user role
+            if st.session_state.get('user', {}).get('is_admin', False):
+                admin_settings.render()
+            else:
+                recruiter_settings.render()
+        elif st.session_state.page == 'admin_panel':
+            # Only admins can access admin panel
+            if st.session_state.get('user', {}).get('is_admin', False):
+                admin_panel.render()
+            else:
+                st.error("❌ Access denied. Admin privileges required.")
+        elif st.session_state.page == 'admin_settings':
+            # Only admins can access admin settings
+            if st.session_state.get('user', {}).get('is_admin', False):
+                admin_settings.render()
+            else:
+                st.error("❌ Access denied. Admin privileges required.")
     else:
         # Login page
         show_login()

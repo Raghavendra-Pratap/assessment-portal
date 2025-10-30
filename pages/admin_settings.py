@@ -1,147 +1,311 @@
-"""Admin Settings Page"""
+"""Admin Settings - System-wide configuration including Google Sheets API"""
 
 import streamlit as st
 import json
+import os
 from src.database import SessionLocal, Recruiter
 
 def render():
-    st.title("⚙️ Settings")
+    """Render admin settings page"""
+    st.title("⚙️ Admin Settings")
+    st.markdown("---")
     
-    if not st.session_state.get('authenticated'):
-        st.error("Please login first")
+    # Check if user is admin
+    if not st.session_state.get('user', {}).get('is_admin', False):
+        st.error("❌ Access denied. Admin privileges required.")
         return
     
-    db = SessionLocal()
-    try:
-        user_id = st.session_state.user['id']
-        recruiter = db.query(Recruiter).filter(Recruiter.id == user_id).first()
+    # System Configuration Section
+    st.subheader("🔧 System Configuration")
+    
+    # Google Sheets API Configuration
+    st.markdown("### 📊 Google Sheets API Configuration")
+    st.markdown("Configure Google Sheets integration for all recruiters.")
+    
+    with st.expander("Google Sheets API Setup", expanded=True):
+        st.markdown("""
+        **Setup Instructions:**
+        1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+        2. Create a new project or select existing one
+        3. Enable Google Sheets API
+        4. Create a Service Account
+        5. Download the JSON credentials file
+        6. Upload the credentials file below
+        """)
         
-        if not recruiter:
-            st.error("User not found")
-            return
+        # File upload for service account JSON
+        uploaded_file = st.file_uploader(
+            "Upload Service Account JSON",
+            type=['json'],
+            help="Upload the service account JSON file downloaded from Google Cloud Console"
+        )
         
-        # Profile Settings
-        st.subheader("Profile Settings")
+        if uploaded_file:
+            try:
+                # Read and validate JSON
+                credentials_data = json.load(uploaded_file)
+                
+                # Validate required fields
+                required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email', 'client_id']
+                missing_fields = [field for field in required_fields if field not in credentials_data]
+                
+                if missing_fields:
+                    st.error(f"Invalid JSON file. Missing fields: {', '.join(missing_fields)}")
+                else:
+                    # Save credentials to environment or config file
+                    credentials_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'google_credentials.json')
+                    os.makedirs(os.path.dirname(credentials_path), exist_ok=True)
+                    
+                    with open(credentials_path, 'w') as f:
+                        json.dump(credentials_data, f, indent=2)
+                    
+                    st.success("✅ Google Sheets credentials saved successfully!")
+                    st.info(f"Credentials saved to: `{credentials_path}`")
+                    
+                    # Display service account info
+                    st.markdown("**Service Account Information:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text(f"Project ID: {credentials_data.get('project_id', 'N/A')}")
+                        st.text(f"Client Email: {credentials_data.get('client_email', 'N/A')}")
+                    with col2:
+                        st.text(f"Type: {credentials_data.get('type', 'N/A')}")
+                        st.text(f"Client ID: {credentials_data.get('client_id', 'N/A')}")
+                    
+            except json.JSONDecodeError:
+                st.error("Invalid JSON file. Please upload a valid service account JSON file.")
+            except Exception as e:
+                st.error(f"Error processing file: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Default Assessment Settings
+    st.subheader("📝 Default Assessment Settings")
+    
+    with st.expander("Default Assessment Configuration", expanded=True):
+        col1, col2 = st.columns(2)
         
-        with st.form("profile_form"):
-            name = st.text_input("Name", value=recruiter.name)
-            company = st.text_input("Company", value=recruiter.company or "")
-            
-            if st.form_submit_button("Update Profile", use_container_width=True):
-                recruiter.name = name
-                recruiter.company = company
-                db.commit()
-                st.success("Profile updated!")
-                st.rerun()
-        
-        st.divider()
-        
-        # Google Sheets API Configuration - ONLY for admins or if using global config
-        from src.utils.admin_auth import is_admin_user
-        user_is_admin = is_admin_user(st.session_state.get('user'))
-        
-        storage_config = recruiter.storage_config or {}
-        use_global_config = storage_config.get('use_global_config', False)
-        
-        if user_is_admin or not use_global_config:
-            # Show Google Sheets config only for admins or if not using global config
-            st.subheader("Google Sheets API Configuration")
-            
-            if use_global_config:
-                st.info("ℹ️ You are currently using the global Google Sheets API configuration. Contact an admin to change this.")
-            
-            google_service_account = storage_config.get('google_service_account', '')
-            
-            google_json = st.text_area(
-                "Google Service Account JSON",
-                value=google_service_account,
-                height=200,
-                placeholder='{"type": "service_account", "project_id": "...", ...}'
+        with col1:
+            default_duration = st.number_input(
+                "Default Duration (minutes)",
+                min_value=5,
+                max_value=480,
+                value=60,
+                help="Default time limit for new assessments"
             )
             
-            if st.button("Save Google Sheets Config", use_container_width=True):
-                try:
-                    # Validate JSON
-                    if google_json:
-                        json.loads(google_json)
-                    
-                    if not storage_config:
-                        storage_config = {}
-                    
-                    storage_config['google_service_account'] = google_json
-                    storage_config['use_global_config'] = False
-                    recruiter.storage_config = storage_config
-                    
-                    db.commit()
-                    
-                    # Update session state
-                    if 'settings' not in st.session_state:
-                        st.session_state.settings = {}
-                    st.session_state.settings['google_service_account'] = google_json
-                    
-                    st.success("Google Sheets API configuration saved!")
-                except json.JSONDecodeError:
-                    st.error("Invalid JSON format!")
+            default_attempts = st.number_input(
+                "Default Max Attempts",
+                min_value=1,
+                max_value=10,
+                value=1,
+                help="Default maximum attempts allowed for assessments"
+            )
+        
+        with col2:
+            default_proctoring = st.selectbox(
+                "Default Proctoring Level",
+                ['basic', 'standard', 'strict'],
+                index=1,
+                help="Default proctoring settings for new assessments"
+            )
             
-            # Test connection
-            if google_json:
-                if st.button("Test Connection"):
-                    from src.services.google_sheets import GoogleSheetsAPI
-                    try:
-                        service = GoogleSheetsAPI(google_json)
-                        if service.service:
-                            st.success("✅ Google Sheets API connection successful!")
-                        else:
-                            st.error("❌ Failed to initialize Google Sheets API")
-                    except Exception as e:
-                        st.error(f"❌ Connection error: {str(e)}")
-        else:
-            st.info("ℹ️ Google Sheets API is configured globally by the system admin. Please contact an administrator for changes.")
+            default_grading = st.selectbox(
+                "Default Grading Mode",
+                ['auto', 'manual', 'hybrid'],
+                index=0,
+                help="Default grading mode for new assessments"
+            )
         
-        st.divider()
+        if st.button("Save Default Settings", type="primary"):
+            # Save to config file or database
+            config = {
+                'default_duration': default_duration,
+                'default_attempts': default_attempts,
+                'default_proctoring': default_proctoring,
+                'default_grading': default_grading
+            }
+            
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'default_settings.json')
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            st.success("✅ Default settings saved successfully!")
+    
+    st.markdown("---")
+    
+    # Security Settings
+    st.subheader("🔒 Security Settings")
+    
+    with st.expander("Security Configuration", expanded=True):
+        col1, col2 = st.columns(2)
         
-        # Branding Settings
-        st.subheader("Branding Settings")
+        with col1:
+            session_timeout = st.number_input(
+                "Session Timeout (minutes)",
+                min_value=5,
+                max_value=480,
+                value=120,
+                help="Auto-logout after inactivity"
+            )
+            
+            password_min_length = st.number_input(
+                "Minimum Password Length",
+                min_value=6,
+                max_value=20,
+                value=8,
+                help="Minimum password length for new accounts"
+            )
         
-        branding_settings = recruiter.branding_settings or {}
+        with col2:
+            enable_2fa = st.checkbox(
+                "Enable Two-Factor Authentication",
+                value=False,
+                help="Require 2FA for admin accounts"
+            )
+            
+            enable_audit_log = st.checkbox(
+                "Enable Audit Logging",
+                value=True,
+                help="Log all admin actions for security"
+            )
+        
+        if st.button("Save Security Settings", type="primary"):
+            security_config = {
+                'session_timeout': session_timeout,
+                'password_min_length': password_min_length,
+                'enable_2fa': enable_2fa,
+                'enable_audit_log': enable_audit_log
+            }
+            
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'security_settings.json')
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            
+            with open(config_path, 'w') as f:
+                json.dump(security_config, f, indent=2)
+            
+            st.success("✅ Security settings saved successfully!")
+    
+    st.markdown("---")
+    
+    # System Information
+    st.subheader("ℹ️ System Information")
+    
+    with st.expander("System Details", expanded=False):
+        db = SessionLocal()
+        try:
+            # Get system stats
+            total_recruiters = db.query(Recruiter).count()
+            admin_recruiters = db.query(Recruiter).filter(Recruiter.is_admin == True).count()
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Recruiters", total_recruiters)
+            with col2:
+                st.metric("Admin Users", admin_recruiters)
+            with col3:
+                st.metric("Regular Recruiters", total_recruiters - admin_recruiters)
+            
+            # Database info
+            st.markdown("**Database Information:**")
+            st.text(f"Database Path: {os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'assessments.db')}")
+            st.text(f"Database Size: {get_db_size()}")
+            
+            # Application info
+            st.markdown("**Application Information:**")
+            st.text(f"Version: 1.0.0")
+            st.text(f"Python Version: {os.sys.version}")
+            
+        finally:
+            db.close()
+    
+    st.markdown("---")
+    
+    # Danger Zone
+    st.subheader("⚠️ Danger Zone")
+    
+    with st.expander("Dangerous Operations", expanded=False):
+        st.warning("⚠️ These operations are irreversible and can cause data loss!")
         
         col1, col2 = st.columns(2)
+        
         with col1:
-            primary_color = st.color_picker("Primary Color", value=branding_settings.get('primary_color', '#667eea'))
+            if st.button("Reset All Settings", type="secondary"):
+                st.session_state.reset_settings = True
+                st.rerun()
+        
         with col2:
-            secondary_color = st.color_picker("Secondary Color", value=branding_settings.get('secondary_color', '#764ba2'))
+            if st.button("Clear All Data", type="secondary"):
+                st.session_state.clear_data = True
+                st.rerun()
         
-        if st.button("Save Branding", use_container_width=True):
-            branding_settings['primary_color'] = primary_color
-            branding_settings['secondary_color'] = secondary_color
-            recruiter.branding_settings = branding_settings
-            db.commit()
-            st.success("Branding updated!")
+        # Handle reset settings
+        if st.session_state.get('reset_settings', False):
+            st.error("Are you sure you want to reset all settings? This will remove all configuration files.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, Reset Settings", type="primary"):
+                    reset_all_settings()
+                    st.session_state.reset_settings = False
+                    st.success("Settings reset successfully!")
+                    st.rerun()
+            with col2:
+                if st.button("Cancel"):
+                    st.session_state.reset_settings = False
+                    st.rerun()
         
-        st.divider()
-        
-        # Change Password
-        st.subheader("Change Password")
-        
-        with st.form("password_form"):
-            current_password = st.text_input("Current Password", type="password")
-            new_password = st.text_input("New Password", type="password")
-            confirm_password = st.text_input("Confirm New Password", type="password")
-            
-            if st.form_submit_button("Change Password", use_container_width=True):
-                from src.utils.auth import verify_password, hash_password
-                
-                if not verify_password(current_password, recruiter.password_hash):
-                    st.error("Current password is incorrect!")
-                elif new_password != confirm_password:
-                    st.error("New passwords do not match!")
-                elif len(new_password) < 6:
-                    st.error("Password must be at least 6 characters!")
-                else:
-                    recruiter.password_hash = hash_password(new_password)
-                    db.commit()
-                    st.success("Password changed successfully!")
-            
-    finally:
-        db.close()
+        # Handle clear data
+        if st.session_state.get('clear_data', False):
+            st.error("Are you sure you want to clear ALL data? This will delete all recruiters, assessments, and sessions!")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, Clear All Data", type="primary"):
+                    clear_all_data()
+                    st.session_state.clear_data = False
+                    st.success("All data cleared successfully!")
+                    st.rerun()
+            with col2:
+                if st.button("Cancel"):
+                    st.session_state.clear_data = False
+                    st.rerun()
 
+def get_db_size():
+    """Get database file size"""
+    try:
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'assessments.db')
+        if os.path.exists(db_path):
+            size_bytes = os.path.getsize(db_path)
+            if size_bytes < 1024:
+                return f"{size_bytes} B"
+            elif size_bytes < 1024 * 1024:
+                return f"{size_bytes / 1024:.1f} KB"
+            else:
+                return f"{size_bytes / (1024 * 1024):.1f} MB"
+        return "Not found"
+    except:
+        return "Unknown"
+
+def reset_all_settings():
+    """Reset all configuration files"""
+    try:
+        config_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config')
+        if os.path.exists(config_dir):
+            import shutil
+            shutil.rmtree(config_dir)
+        st.success("All settings reset successfully!")
+    except Exception as e:
+        st.error(f"Error resetting settings: {str(e)}")
+
+def clear_all_data():
+    """Clear all data from database"""
+    try:
+        from src.database import Base, engine
+        # Drop all tables and recreate
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        st.success("All data cleared successfully!")
+    except Exception as e:
+        st.error(f"Error clearing data: {str(e)}")

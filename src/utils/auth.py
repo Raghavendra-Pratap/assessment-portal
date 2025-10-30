@@ -22,7 +22,9 @@ def authenticate_user(email: str, password: str):
                 'id': user.id,
                 'email': user.email,
                 'name': user.name,
-                'company': user.company
+                'company': user.company,
+                'dashboard_slug': user.dashboard_slug,
+                'is_admin': user.is_admin or False
             }
         return None
     finally:
@@ -56,12 +58,9 @@ def create_default_admin():
     - Email: admin@example.com
     - Password: admin123
     """
-    from src.database import safe_query_recruiter
-    
     db = SessionLocal()
     try:
-        # Use safe query method
-        admin = safe_query_recruiter('admin@example.com')
+        admin = db.query(Recruiter).filter(Recruiter.email == 'admin@example.com').first()
         if not admin:
             # SECURITY NOTE: This is a weak default password for initial setup only
             # Users MUST change this after first login
@@ -71,22 +70,17 @@ def create_default_admin():
                 name='Admin User',
                 company='Excel Assessment Pro',
                 dashboard_slug='admin',
-                is_admin=True  # Mark as admin
+                is_admin=True  # Set as admin user
             )
             db.add(admin)
             db.commit()
             return True
         else:
-            # Update existing admin user to ensure is_admin is True
-            try:
-                if not getattr(admin, 'is_admin', False):
-                    admin.is_admin = True
-                    db.commit()
-            except Exception as e:
-                print(f"⚠️ Could not update admin flag: {e}")
-        return False
-    except Exception as e:
-        print(f"⚠️ Admin creation warning: {e}")
+            # Update existing admin user to ensure is_admin=True
+            if not admin.is_admin:
+                admin.is_admin = True
+                db.commit()
+                return True
         return False
     finally:
         db.close()

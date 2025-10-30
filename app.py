@@ -12,9 +12,11 @@ Access policy:
 
 import os
 import json
+import io
 import time
 import streamlit as st
 import pyotp
+import qrcode
 
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config', 'admin_totp.json')
@@ -99,6 +101,17 @@ def render_totp_login(secret: str, issuer: str, account: str):
             st.info(f"Time remaining: {remaining}s")
         except Exception:
             pass
+
+    # Optional, temporary QR setup for onboarding only. Requires explicit env flag.
+    if os.getenv('ADMIN_TOTP_ALLOW_QR', '').lower() == 'true':
+        with st.expander('Temporary: Set up authenticator by scanning a QR (remove after setup)'):
+            uri = pyotp.totp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
+            img = qrcode.make(uri)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            st.image(buf.getvalue(), caption='Scan this in Google Authenticator / Authy')
+            st.code(uri, language=None)
+            st.warning('This exposes your secret. Disable by unsetting ADMIN_TOTP_ALLOW_QR once configured.')
 
     with st.expander('Having trouble?'):
         st.markdown('''

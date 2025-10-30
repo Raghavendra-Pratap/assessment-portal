@@ -21,7 +21,7 @@ def render():
         # Check if we should create new or edit existing
         if st.session_state.get('create_new', False):
             st.session_state.create_new = False
-            create_assessment(db, user_id)
+            create_assessment_advanced(db, user_id)
         elif 'edit_assessment_id' in st.session_state:
             edit_assessment_id = st.session_state.edit_assessment_id
             del st.session_state.edit_assessment_id
@@ -123,6 +123,114 @@ def create_assessment(db, user_id):
             st.session_state.edit_assessment_id = assessment.id
             st.session_state.page = 'assessments'
             st.rerun()
+
+def create_assessment_advanced(db, user_id):
+    """Create a new assessment with question builder UI similar to plugin"""
+    # Draft state in session
+    draft = st.session_state.get('assessment_draft', {
+        'title': '',
+        'questions': []
+    })
+    st.session_state.assessment_draft = draft
+
+    # Top bar: title input and actions
+    top_left, top_right = st.columns([4, 2])
+    with top_left:
+        draft['title'] = st.text_input("Enter assessment name...", value=draft.get('title', ''), placeholder="New Assessment")
+    with top_right:
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c1:
+            st.button("Import", key="import_btn", disabled=True)
+        with c2:
+            if st.button("Cancel"):
+                st.session_state.assessment_draft = {'title': '', 'questions': []}
+                st.session_state.page = 'assessments'
+                st.rerun()
+        with c3:
+            if st.button("Save Assessment", type="primary"):
+                if not draft['title']:
+                    st.error("Assessment name is required")
+                else:
+                    # Persist assessment and questions
+                    assessment = Assessment(
+                        recruiter_id=user_id,
+                        title=draft['title'],
+                        description='',
+                        duration_minutes=60,
+                        settings={}
+                    )
+                    db.add(assessment)
+                    db.commit()
+
+                    for idx, q in enumerate(draft['questions'], start=1):
+                        question = Question(
+                            assessment_id=assessment.id,
+                            type=q['type'],
+                            question_text=q['text'],
+                            section_name=q.get('section') or None,
+                            sheet_template_url=q.get('sheet_url') or None,
+                            answer_key=q.get('answer_key') or {},
+                            points=q['score'],
+                            display_order=idx
+                        )
+                        db.add(question)
+                    db.commit()
+
+                    st.session_state.assessment_draft = {'title': '', 'questions': []}
+                    st.success("Assessment created")
+                    st.session_state.page = 'assessments'
+                    st.rerun()
+
+    st.divider()
+
+    # Two-column layout: left panel - question editor; right - sheet placeholder
+    left, right = st.columns([1, 2])
+
+    with left:
+        st.markdown("#### Question Settings")
+        with st.form("question_builder_form"):
+            st.markdown("**Question 01**")
+            section_name = st.text_input("Section Name", placeholder="e.g., Excel Basics, Advanced Formulas")
+            question_type = st.selectbox("Question Type *", ["formula", "data-entry", "mcq", "scenario"], index=0)
+            question_text = st.text_area("Question Text *", placeholder="Enter your question...")
+            score = st.number_input("Score *", min_value=1, value=10)
+            mandatory = st.toggle("Mandatory Question", value=True)
+            time_bound = st.toggle("Time Bound", value=False)
+            negative_marking = st.toggle("Enable Negative Marking", value=False)
+            instructions = st.text_area("Instructions (if any)", placeholder="Additional instructions for the candidate...")
+            sheet_url = st.text_input("Google Sheet ID or URL", placeholder="Enter Google Sheet ID or paste full URL...")
+
+            add_q = st.form_submit_button("Save Question", use_container_width=True)
+
+            if add_q:
+                if not question_text:
+                    st.error("Question text is required")
+                else:
+                    draft['questions'].append({
+                        'type': question_type,
+                        'text': question_text,
+                        'section': section_name,
+                        'score': int(score),
+                        'mandatory': mandatory,
+                        'time_bound': time_bound,
+                        'negative_marking': negative_marking,
+                        'instructions': instructions,
+                        'sheet_url': sheet_url,
+                        'answer_key': {}
+                    })
+                    st.success("Question saved to draft")
+
+        if st.button("+ Add Question", use_container_width=True):
+            pass  # The form already adds on submit; button present for UX parity
+
+    with right:
+        st.markdown("#### Sheet 1")
+        if not draft['questions']:
+            st.info("No Questions Yet\n\nAdd a question on the left to get started with Google Sheets integration")
+        else:
+            for idx, q in enumerate(draft['questions'], start=1):
+                with st.expander(f"Question {idx}: {q['type']} - {q['text'][:40]}"):
+                    st.write(q)
 
 def edit_assessment(db, user_id, assessment_id):
     """Edit an existing assessment"""

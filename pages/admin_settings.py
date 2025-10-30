@@ -76,6 +76,31 @@ def render():
                 st.error("Invalid JSON file. Please upload a valid service account JSON file.")
             except Exception as e:
                 st.error(f"Error processing file: {str(e)}")
+
+        st.markdown("---")
+        st.markdown("#### OAuth Client (for Drive/Sheets where needed)")
+        oauth_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'google_oauth.json')
+        existing = {}
+        if os.path.exists(oauth_config_path):
+            try:
+                with open(oauth_config_path, 'r') as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+
+        client_id = st.text_input("Google API Client ID", value=existing.get('client_id', ''), help="OAuth 2.0 Client ID")
+        client_secret = st.text_input("Google API Client Secret", value=existing.get('client_secret', ''), type="password", help="OAuth 2.0 Client Secret")
+        redirect_uri = st.text_input("Redirect URI", value=existing.get('redirect_uri', 'http://localhost:8501'), help="Authorized redirect URI for OAuth callbacks")
+        if st.button("Save OAuth Credentials", type="primary"):
+            data = {
+                'client_id': client_id.strip(),
+                'client_secret': client_secret.strip(),
+                'redirect_uri': redirect_uri.strip()
+            }
+            os.makedirs(os.path.dirname(oauth_config_path), exist_ok=True)
+            with open(oauth_config_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            st.success("✅ OAuth credentials saved")
     
     st.markdown("---")
     

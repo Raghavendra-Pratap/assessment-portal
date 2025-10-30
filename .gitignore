@@ -1,0 +1,25 @@
+# Secrets and configs
+config/**
+!config/.keep
+*.json
+*.pem
+*.key
+.env
+.env.*
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/**
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+

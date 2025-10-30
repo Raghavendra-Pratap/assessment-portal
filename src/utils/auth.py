@@ -56,9 +56,12 @@ def create_default_admin():
     - Email: admin@example.com
     - Password: admin123
     """
+    from src.database import safe_query_recruiter
+    
     db = SessionLocal()
     try:
-        admin = db.query(Recruiter).filter(Recruiter.email == 'admin@example.com').first()
+        # Use safe query method
+        admin = safe_query_recruiter('admin@example.com')
         if not admin:
             # SECURITY NOTE: This is a weak default password for initial setup only
             # Users MUST change this after first login
@@ -75,9 +78,15 @@ def create_default_admin():
             return True
         else:
             # Update existing admin user to ensure is_admin is True
-            if not admin.is_admin:
-                admin.is_admin = True
-                db.commit()
+            try:
+                if not getattr(admin, 'is_admin', False):
+                    admin.is_admin = True
+                    db.commit()
+            except Exception as e:
+                print(f"⚠️ Could not update admin flag: {e}")
+        return False
+    except Exception as e:
+        print(f"⚠️ Admin creation warning: {e}")
         return False
     finally:
         db.close()

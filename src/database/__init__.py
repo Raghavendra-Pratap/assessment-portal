@@ -19,23 +19,43 @@ SessionLocal = sessionmaker(bind=engine)
 
 def init_db():
     """Initialize database tables"""
+    # First, create all tables
     Base.metadata.create_all(bind=engine)
     
-    # Add missing columns to existing tables (migration)
+    # Then run migrations for existing databases
     try:
         with engine.connect() as conn:
-            # Check if is_admin column exists in recruiters table
+            # Check if recruiters table exists and get its structure
             result = conn.execute("PRAGMA table_info(recruiters)")
             columns = [row[1] for row in result.fetchall()]
             
+            # Add is_admin column if it doesn't exist
             if 'is_admin' not in columns:
-                # Add is_admin column
                 conn.execute("ALTER TABLE recruiters ADD COLUMN is_admin BOOLEAN DEFAULT 0")
                 conn.commit()
-                print("Added is_admin column to recruiters table")
+                print("✅ Added is_admin column to recruiters table")
+            
+            # Update existing admin user to have is_admin=True
+            conn.execute("UPDATE recruiters SET is_admin = 1 WHERE email = 'admin@example.com'")
+            conn.commit()
+            print("✅ Updated admin user permissions")
+            
     except Exception as e:
-        print(f"Migration warning: {e}")
-        # Continue anyway - the column might already exist
+        print(f"⚠️ Migration warning: {e}")
+        # Continue anyway - the app should still work
+
+def safe_query_recruiter(email):
+    """Safely query recruiter with fallback for missing columns"""
+    try:
+        db = SessionLocal()
+        try:
+            return db.query(Recruiter).filter(Recruiter.email == email).first()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ Query warning: {e}")
+        # Fallback: return None if there's a column issue
+        return None
 
 def get_db():
     """Get database session"""

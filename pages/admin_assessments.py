@@ -3,9 +3,38 @@
 import streamlit as st
 import json
 import uuid
+import re
 from datetime import datetime, timedelta
 from src.database import SessionLocal, Assessment, Question, Invitation, Recruiter
 from src.utils.auth import check_auth
+
+def extract_sheet_id(sheet_url_or_id):
+    """
+    Extract Google Sheet ID from URL or return the ID if it's already just an ID
+    
+    Args:
+        sheet_url_or_id: Full Google Sheets URL or just the sheet ID
+        
+    Returns:
+        str: Sheet ID or None if invalid
+    """
+    if not sheet_url_or_id:
+        return None
+    
+    sheet_url_or_id = sheet_url_or_id.strip()
+    
+    # If it contains /d/, it's a full URL
+    if '/d/' in sheet_url_or_id:
+        # Extract ID from URL pattern: /d/SHEET_ID/
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url_or_id)
+        if match:
+            return match.group(1)
+    else:
+        # Assume it's just the sheet ID (alphanumeric, dash, underscore)
+        if re.match(r'^[a-zA-Z0-9-_]+$', sheet_url_or_id):
+            return sheet_url_or_id
+    
+    return None
 
 def render():
     st.title("📝 Assessments")
@@ -183,8 +212,8 @@ def create_assessment_advanced(db, user_id):
 
     st.divider()
 
-    # Two-column layout: left panel - question editor; right - sheet placeholder
-    left, right = st.columns([1, 2])
+    # Two-column layout: left panel (1/4) - question editor; right (3/4) - Google Sheet
+    left, right = st.columns([1, 3])
 
     with left:
         st.markdown("#### Question Settings")
@@ -192,15 +221,34 @@ def create_assessment_advanced(db, user_id):
             st.markdown("**Question 01**")
             section_name = st.text_input("Section Name", placeholder="e.g., Excel Basics, Advanced Formulas")
             question_type = st.selectbox("Question Type *", ["formula", "data-entry", "mcq", "scenario"], index=0)
-            question_text = st.text_area("Question Text *", placeholder="Enter your question...")
+            question_text = st.text_area("Question Text *", placeholder="Enter your question...", height=100)
             score = st.number_input("Score *", min_value=1, value=10)
             mandatory = st.toggle("Mandatory Question", value=True)
             time_bound = st.toggle("Time Bound", value=False)
             negative_marking = st.toggle("Enable Negative Marking", value=False)
-            instructions = st.text_area("Instructions (if any)", placeholder="Additional instructions for the candidate...")
-            sheet_url = st.text_input("Google Sheet ID or URL", placeholder="Enter Google Sheet ID or paste full URL...")
-
-            add_q = st.form_submit_button("Save Question", use_container_width=True)
+            instructions = st.text_area("Instructions (if any)", placeholder="Additional instructions for the candidate...", height=60)
+            sheet_url = st.text_input("Google Sheet ID or URL", placeholder="Enter Google Sheet ID or paste full URL...", key="sheet_url_input", value=st.session_state.get('preview_sheet_url', ''))
+            
+            # Preview button outside form
+            preview_col1, preview_col2 = st.columns([1, 1])
+            with preview_col1:
+                preview_btn = st.form_submit_button("👁️ Preview Sheet", use_container_width=True)
+            with preview_col2:
+                add_q = st.form_submit_button("💾 Save Question", use_container_width=True, type="primary")
+            
+            # Preview sheet without saving
+            if preview_btn:
+                if sheet_url:
+                    sheet_id = extract_sheet_id(sheet_url)
+                    if sheet_id:
+                        st.session_state.current_sheet_url = sheet_url
+                        st.session_state.preview_sheet_url = sheet_url
+                        st.success("✅ Sheet loaded! Check the workspace on the right.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid Google Sheet URL. Please enter a valid URL or ID.")
+                else:
+                    st.warning("⚠️ Please enter a Google Sheet URL or ID first.")
 
             if add_q:
                 if not question_text:
@@ -218,19 +266,95 @@ def create_assessment_advanced(db, user_id):
                         'sheet_url': sheet_url,
                         'answer_key': {}
                     })
-                    st.success("Question saved to draft")
+                    # Store sheet URL for display in workspace
+                    if sheet_url:
+                        st.session_state.current_sheet_url = sheet_url
+                        st.session_state.preview_sheet_url = sheet_url
+                    st.success("✅ Question saved to draft! Sheet loaded in workspace.")
+                    st.rerun()
 
         if st.button("+ Add Question", use_container_width=True):
             pass  # The form already adds on submit; button present for UX parity
 
     with right:
-        st.markdown("#### Sheet 1")
-        if not draft['questions']:
-            st.info("No Questions Yet\n\nAdd a question on the left to get started with Google Sheets integration")
+        st.markdown("#### Google Sheet Workspace")
+        
+        # Get current sheet URL from latest question or session state
+        current_sheet_url = None
+        if draft.get('questions'):
+            current_sheet_url = draft['questions'][-1].get('sheet_url', '')
+        
+        # Also check session state for real-time preview
+        if not current_sheet_url:
+            current_sheet_url = st.session_state.get('current_sheet_url', '')
+        
+        if current_sheet_url:
+            # Extract sheet ID from URL
+            sheet_id = extract_sheet_id(current_sheet_url)
+            
+            if sheet_id:
+                # Embed Google Sheet in iframe
+                embed_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?usp=sharing&rm=minimal"
+                
+                # Add refresh button
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("🔄 Refresh Sheet", use_container_width=True):
+                        st.rerun()
+                
+                # Create iframe with proper styling - full height for assessment workspace
+                st.markdown(f"""
+                <div style="width: 100%; height: 85vh; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                    <iframe 
+                        src="{embed_url}" 
+                        width="100%" 
+                        height="100%"
+                        frameborder="0"
+                        style="border: none;"
+                        allowfullscreen
+                    ></iframe>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.caption(f"📊 Sheet ID: `{sheet_id[:20]}...` | [🔗 Open in new tab]({embed_url})")
+                
+                # Quick actions
+                st.markdown("**Quick Actions:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.link_button("📝 Edit Sheet", embed_url, use_container_width=True)
+                with col2:
+                    # Share URL (view only)
+                    view_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/preview"
+                    st.link_button("👁️ Preview", view_url, use_container_width=True)
+                with col3:
+                    # Copy sheet ID button
+                    if st.button("📋 Copy Sheet ID", use_container_width=True):
+                        st.code(sheet_id, language=None)
+                        st.info("Sheet ID copied! Use this ID or the full URL in other questions.")
+            else:
+                st.error("❌ Invalid Google Sheet URL. Please enter a valid Google Sheet ID or URL.")
+                st.info("💡 **Valid formats:**\n- `https://docs.google.com/spreadsheets/d/SHEET_ID/edit`\n- `SHEET_ID`")
         else:
-            for idx, q in enumerate(draft['questions'], start=1):
-                with st.expander(f"Question {idx}: {q['type']} - {q['text'][:40]}"):
-                    st.write(q)
+            st.info("""
+            📝 **No Google Sheet loaded yet**
+            
+            Enter a Google Sheet URL or ID in the form on the left, then click **"Save Question"** to load the sheet here.
+            
+            **To create a new sheet:**
+            1. Go to [Google Sheets](https://sheets.google.com)
+            2. Create a new spreadsheet
+            3. Share it (make sure it's accessible) or keep it private if you're logged in
+            4. Copy the URL and paste it in the "Google Sheet ID or URL" field
+            
+            **Or use an existing sheet:**
+            - Paste the full Google Sheets URL: `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit`
+            - Or just paste the Sheet ID: `YOUR_SHEET_ID`
+            
+            **Note:** The sheet must be either:
+            - Publicly shared, OR
+            - You must be logged into the same Google account that owns the sheet
+            """)
 
 def edit_assessment(db, user_id, assessment_id):
     """Edit an existing assessment"""

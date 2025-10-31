@@ -17,14 +17,14 @@ def render():
     st.title("🔧 Admin Dashboard")
     st.markdown("---")
     
+    # Get all users (needed for multiple tabs)
+    users = get_all_users()
+    
     # Page tabs
     tab1, tab2, tab3 = st.tabs(["👥 User Management", "📊 Statistics", "⚙️ Settings"])
     
     with tab1:
         st.subheader("User Management")
-        
-        # Get all users
-        users = get_all_users()
         
         if not users:
             st.info("No users found.")

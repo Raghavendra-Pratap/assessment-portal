@@ -4,6 +4,7 @@ import streamlit as st
 from src.database import SessionLocal, User
 from src.utils.auth import get_all_users, update_user_role, toggle_user_status, get_user_by_id
 from datetime import datetime
+import pages.admin_settings as admin_settings
 
 def render():
     """Render admin page"""
@@ -158,9 +159,12 @@ def render():
             st.info("No recent logins")
     
     with tab3:
-        # Import and render admin settings page
-        import pages.admin_settings as admin_settings
-        admin_settings.render()
+        # Render admin settings page
+        try:
+            admin_settings.render()
+        except Exception as e:
+            st.error(f"Error loading settings: {str(e)}")
+            st.exception(e)
 
 def show_user_details(user_data):
     """Show detailed user information"""

@@ -7,11 +7,12 @@ import os
 def render():
     """Render admin settings page"""
     
-    # Check if user is admin
+    # Note: Admin check is done in admin.py before calling this function
+    # But we'll keep a check here for safety
     user = st.session_state.get('user', {})
     if user.get('role') != 'admin':
         st.error("❌ Access denied. Admin privileges required.")
-        st.stop()
+        return  # Return instead of stop() to avoid issues in tab context
     
     st.subheader("Google Cloud Console Settings")
     st.markdown("Configure Google Cloud Console credentials for API integrations.")

@@ -56,22 +56,42 @@ class GoogleSheetsAPI:
             
             new_sheet_id = copied_file['id']
             
-            # Share with email if provided
-            if share_with_email:
+            # Make sheet publicly viewable for embedding (required for iframes)
+            try:
+                # Share with "Anyone with the link" for viewing
                 permission = {
-                    'type': 'user',
-                    'role': 'writer',
-                    'emailAddress': share_with_email
+                    'type': 'anyone',
+                    'role': 'reader'
                 }
                 self.drive_service.permissions().create(
                     fileId=new_sheet_id,
                     body=permission
                 ).execute()
+            except Exception as e:
+                # Log but don't fail if sharing fails
+                pass
+            
+            # Also share with email if provided
+            if share_with_email:
+                try:
+                    permission = {
+                        'type': 'user',
+                        'role': 'writer',
+                        'emailAddress': share_with_email
+                    }
+                    self.drive_service.permissions().create(
+                        fileId=new_sheet_id,
+                        body=permission
+                    ).execute()
+                except Exception as e:
+                    # Log but don't fail if sharing fails
+                    pass
             
             return {
                 'success': True,
                 'sheet_id': new_sheet_id,
-                'url': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}"
+                'url': f"https://docs.google.com/spreadsheets/d/{new_sheet_id}",
+                'title': title
             }
         except HttpError as e:
             return {'success': False, 'error': str(e)}
@@ -162,13 +182,13 @@ class GoogleSheetsAPI:
             result = self.service.spreadsheets().create(body=spreadsheet).execute()
             sheet_id = result['spreadsheetId']
             
-            # Share with email if provided
-            if share_with_email and self.drive_service:
+            # Make sheet publicly viewable for embedding (required for iframes)
+            if self.drive_service:
                 try:
+                    # Share with "Anyone with the link" for viewing
                     permission = {
-                        'type': 'user',
-                        'role': 'writer',
-                        'emailAddress': share_with_email
+                        'type': 'anyone',
+                        'role': 'reader'
                     }
                     self.drive_service.permissions().create(
                         fileId=sheet_id,
@@ -177,6 +197,22 @@ class GoogleSheetsAPI:
                 except Exception as e:
                     # Log but don't fail if sharing fails
                     pass
+                
+                # Also share with email if provided
+                if share_with_email:
+                    try:
+                        permission = {
+                            'type': 'user',
+                            'role': 'writer',
+                            'emailAddress': share_with_email
+                        }
+                        self.drive_service.permissions().create(
+                            fileId=sheet_id,
+                            body=permission
+                        ).execute()
+                    except Exception as e:
+                        # Log but don't fail if sharing fails
+                        pass
             
             return {
                 'success': True,

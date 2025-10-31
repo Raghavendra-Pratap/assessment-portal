@@ -336,8 +336,10 @@ def render():
                 else:
                     st.markdown(f"**📊 Google Sheet**")
                 
-                # Create embed URL - using edit mode for better integration
-                embed_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?usp=sharing&rm=minimal&widget=true&headers=false"
+                # Create URLs for different purposes
+                # Use /preview for read-only embedding (better for iframes)
+                embed_preview_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/preview"
+                embed_edit_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?usp=sharing"
                 
                 # Quick actions
                 action_col1, action_col2, action_col3, action_col4 = st.columns(4)
@@ -345,42 +347,44 @@ def render():
                     if st.button("🔄 Refresh", key="refresh_sheet", use_container_width=True):
                         st.rerun()
                 with action_col2:
-                    if st.button("✏️ Open in New Tab", key="open_new_tab", use_container_width=True):
-                        st.markdown(f'<script>window.open("{embed_url}", "_blank");</script>', unsafe_allow_html=True)
+                    if st.button("✏️ Edit Sheet", key="open_new_tab", use_container_width=True):
+                        st.markdown(f'<script>window.open("{embed_edit_url}", "_blank");</script>', unsafe_allow_html=True)
                 with action_col3:
                     st.markdown(f"**Sheet ID:** `{sheet_id[:12]}...`")
                 with action_col4:
                     if st.button("🔗 Copy URL", key="copy_url", use_container_width=True):
-                        st.session_state.copied_url = embed_url
+                        st.session_state.copied_url = embed_edit_url
                         st.success("URL copied! Paste it below or in your browser.")
-                        st.code(embed_url, language=None)
+                        st.code(embed_edit_url, language=None)
                 
                 # Display copied URL if available
                 if st.session_state.get('copied_url'):
                     st.info(f"**Copied URL:** {st.session_state.copied_url}")
                 
                 # Create iframe with proper styling - full height for assessment workspace
-                # Use the embed URL which is more reliable for iframes
-                embed_public_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/preview"
-                
+                # Use preview mode for better iframe compatibility (doesn't require login)
                 st.markdown(f"""
                 <div style="width: 100%; height: 75vh; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-top: 10px; background-color: #ffffff;">
                     <iframe 
-                        src="{embed_url}" 
+                        src="{embed_preview_url}" 
                         width="100%" 
                         height="100%" 
                         frameborder="0"
                         style="border: none; min-height: 600px;"
                         allow="clipboard-read; clipboard-write"
-                        allowfullscreen="true">
+                        allowfullscreen="true"
+                        loading="lazy">
                     </iframe>
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # Also show edit link option
+                st.caption(f"📝 [Edit this sheet in a new tab]({embed_edit_url})")
+                
                 # Fallback link in case iframe doesn't load
                 st.markdown(f"""
                 <div style="text-align: center; margin-top: 10px;">
-                    <a href="{embed_url}" target="_blank" style="color: #64748b; text-decoration: none; font-size: 0.9em;">
+                    <a href="{embed_edit_url}" target="_blank" style="color: #64748b; text-decoration: none; font-size: 0.9em;">
                         🔗 Open in New Window
                     </a>
                 </div>

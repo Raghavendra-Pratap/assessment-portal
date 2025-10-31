@@ -71,17 +71,21 @@ def main():
             else:
                 recruiter_settings.render()
         elif st.session_state.page == 'admin_panel':
-            # Only admins can access admin panel
-            if st.session_state.get('user', {}).get('is_admin', False):
-                admin_panel.render()
-            else:
+            # Only admins can access admin panel - redirect non-admins
+            if not st.session_state.get('user', {}).get('is_admin', False):
                 st.error("❌ Access denied. Admin privileges required.")
+                st.warning("Redirecting to dashboard...")
+                st.session_state.page = 'dashboard'
+                st.rerun()
+            admin_panel.render()
         elif st.session_state.page == 'admin_settings':
-            # Only admins can access admin settings
-            if st.session_state.get('user', {}).get('is_admin', False):
-                admin_settings.render()
-            else:
+            # Only admins can access admin settings - redirect non-admins
+            if not st.session_state.get('user', {}).get('is_admin', False):
                 st.error("❌ Access denied. Admin privileges required.")
+                st.warning("Redirecting to settings...")
+                st.session_state.page = 'settings'
+                st.rerun()
+            admin_settings.render()
     else:
         # Login page
         show_login()

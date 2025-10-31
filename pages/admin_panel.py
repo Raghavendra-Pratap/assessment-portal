@@ -11,9 +11,12 @@ def render():
     st.title("🔧 Admin Panel")
     st.markdown("---")
     
-    # Check if user is admin
+    # Check if user is admin - block access and redirect
     if not st.session_state.get('user', {}).get('is_admin', False):
         st.error("❌ Access denied. Admin privileges required.")
+        st.warning("⚠️ You don't have permission to access this page. Redirecting to dashboard...")
+        st.session_state.page = 'dashboard'
+        st.rerun()
         return
     
     db = SessionLocal()

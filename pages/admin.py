@@ -1,10 +1,11 @@
 """Admin Page - User Management and Role Assignment"""
 
 import streamlit as st
+import json
+import os
 from src.database import SessionLocal, User
 from src.utils.auth import get_all_users, update_user_role, toggle_user_status, get_user_by_id
 from datetime import datetime
-import pages.admin_settings as admin_settings
 
 def render():
     """Render admin page"""
@@ -18,14 +19,14 @@ def render():
     st.title("🔧 Admin Dashboard")
     st.markdown("---")
     
-    # Get all users (needed for multiple tabs)
-    users = get_all_users()
-    
     # Page tabs
-    tab1, tab2, tab3 = st.tabs(["👥 User Management", "📊 Statistics", "⚙️ Settings"])
+    tab1, tab2 = st.tabs(["👥 User Management", "📊 Statistics"])
     
     with tab1:
         st.subheader("User Management")
+        
+        # Get all users
+        users = get_all_users()
         
         if not users:
             st.info("No users found.")
@@ -158,13 +159,122 @@ def render():
         else:
             st.info("No recent logins")
     
-    with tab3:
-        # Render admin settings page
-        try:
-            admin_settings.render()
-        except Exception as e:
-            st.error(f"Error loading settings: {str(e)}")
-            st.exception(e)
+    # Settings Section - Google Cloud Console Credentials
+    st.markdown("---")
+    st.markdown("### ⚙️ Google Cloud Console Settings")
+    
+    with st.expander("🔑 Configure Google Cloud API Credentials", expanded=False):
+        # Load existing credentials
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'google_credentials.json')
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        existing_config = {}
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    existing_config = json.load(f)
+            except:
+                existing_config = {}
+        
+        # Form for credentials
+        with st.form("google_credentials_form"):
+            st.markdown("#### OAuth 2.0 Client Credentials")
+            
+            client_id = st.text_input(
+                "Client ID",
+                value=existing_config.get('client_id', ''),
+                placeholder="e.g., 417402972310-nec398pa3d60ipq7304h4gu8cn9f1",
+                help="From Google Cloud Console > APIs & Services > Credentials"
+            )
+            
+            client_secret = st.text_input(
+                "Client Secret",
+                value=existing_config.get('client_secret', ''),
+                type="password",
+                placeholder="Enter your Google OAuth 2.0 Client Secret",
+                help="Your Google OAuth 2.0 Client Secret"
+            )
+            
+            st.markdown("---")
+            st.markdown("#### Service Account JSON")
+            
+            service_account_json = st.text_area(
+                "Service Account JSON",
+                value=json.dumps(existing_config.get('service_account', {}), indent=2) if existing_config.get('service_account') else '',
+                height=200,
+                placeholder='{\n  "type": "service_account",\n  "project_id": "your-project-id",\n  ...\n}',
+                help="Paste the complete JSON key file content"
+            )
+            
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                save_button = st.form_submit_button("💾 Save Credentials", type="primary", use_container_width=True)
+            
+            if save_button:
+                config = {
+                    'client_id': client_id.strip(),
+                    'client_secret': client_secret.strip()
+                }
+                
+                # Validate and parse service account JSON
+                if service_account_json.strip():
+                    try:
+                        service_account_data = json.loads(service_account_json)
+                        config['service_account'] = service_account_data
+                    except json.JSONDecodeError:
+                        st.error("❌ Invalid JSON format for Service Account. Please check your JSON syntax.")
+                        return
+                elif existing_config.get('service_account'):
+                    # Keep existing service account if new one is empty
+                    config['service_account'] = existing_config.get('service_account')
+                
+                # Save to config file
+                try:
+                    with open(config_path, 'w') as f:
+                        json.dump(config, f, indent=2)
+                    st.success("✅ Google Cloud credentials saved successfully!")
+                    
+                    # Display saved configuration summary
+                    if client_id:
+                        st.info(f"**Client ID:** {client_id[:20]}... (saved)")
+                    if client_secret:
+                        st.info("**Client Secret:** ******** (saved)")
+                    if config.get('service_account'):
+                        project_id = config['service_account'].get('project_id', 'N/A')
+                        client_email = config['service_account'].get('client_email', 'N/A')
+                        st.info(f"**Service Account:** {project_id} | {client_email}")
+                except Exception as e:
+                    st.error(f"❌ Error saving credentials: {str(e)}")
+        
+        # Display current configuration status
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    current_config = json.load(f)
+                    
+                st.markdown("---")
+                st.markdown("#### Current Configuration Status")
+                
+                status_cols = st.columns(3)
+                with status_cols[0]:
+                    if current_config.get('client_id'):
+                        st.success("✅ Client ID configured")
+                    else:
+                        st.warning("⚠️ Client ID not set")
+                
+                with status_cols[1]:
+                    if current_config.get('client_secret'):
+                        st.success("✅ Client Secret configured")
+                    else:
+                        st.warning("⚠️ Client Secret not set")
+                
+                with status_cols[2]:
+                    if current_config.get('service_account'):
+                        st.success("✅ Service Account configured")
+                    else:
+                        st.warning("⚠️ Service Account not set")
+            except:
+                st.warning("⚠️ Could not read configuration file")
 
 def show_user_details(user_data):
     """Show detailed user information"""

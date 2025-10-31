@@ -14,6 +14,7 @@ from src.database import init_db
 from src.utils.auth import check_auth, init_session_state, create_default_admin
 import pages.admin_dashboard as admin_dashboard
 import pages.admin_assessments as admin_assessments
+import pages.create_assessment as create_assessment
 import pages.admin_sessions as admin_sessions
 import pages.admin_settings as admin_settings
 import pages.admin_panel as admin_panel
@@ -105,6 +106,8 @@ def main():
             admin_dashboard.render()
         elif st.session_state.page == 'assessments':
             admin_assessments.render()
+        elif st.session_state.page == 'create_assessment':
+            create_assessment.render()
         elif st.session_state.page == 'candidates':
             # For now, redirect to sessions - we'll create candidates page later
             admin_sessions.render()

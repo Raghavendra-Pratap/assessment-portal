@@ -51,7 +51,8 @@ def render():
         # Check if we should create new or edit existing
         if st.session_state.get('create_new', False):
             st.session_state.create_new = False
-            create_assessment_advanced(db, user_id)
+            st.session_state.page = 'create_assessment'
+            st.rerun()
         elif 'edit_assessment_id' in st.session_state:
             edit_assessment_id = st.session_state.edit_assessment_id
             del st.session_state.edit_assessment_id
@@ -68,7 +69,7 @@ def list_assessments(db, user_id):
     
     with col2:
         if st.button("➕ Create New Assessment", use_container_width=True, type="primary"):
-            st.session_state.create_new = True
+            st.session_state.page = 'create_assessment'
             st.rerun()
     
     assessments = db.query(Assessment).filter(Assessment.recruiter_id == user_id).order_by(Assessment.created_at.desc()).all()
@@ -76,7 +77,7 @@ def list_assessments(db, user_id):
     if not assessments:
         st.info("No assessments yet. Create your first assessment!")
         if st.button("Create Assessment"):
-            st.session_state.create_new = True
+            st.session_state.page = 'create_assessment'
             st.rerun()
         return
     

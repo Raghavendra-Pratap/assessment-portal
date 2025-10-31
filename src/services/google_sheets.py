@@ -141,37 +141,186 @@ class GoogleSheetsAPI:
         if col >= 26:
             col_letter = chr(64 + col // 26) + col_letter
         return f"{col_letter}{row + 1}"
+    
+    def create_sheet(self, title: str, share_with_email: str = None) -> dict:
+        """Create a new Google Sheet"""
+        if not self.service:
+            return {'success': False, 'error': 'Sheets service not initialized'}
+        
+        try:
+            spreadsheet = {
+                'properties': {
+                    'title': title
+                },
+                'sheets': [{
+                    'properties': {
+                        'title': 'Sheet1'
+                    }
+                }]
+            }
+            
+            result = self.service.spreadsheets().create(body=spreadsheet).execute()
+            sheet_id = result['spreadsheetId']
+            
+            # Share with email if provided
+            if share_with_email and self.drive_service:
+                try:
+                    permission = {
+                        'type': 'user',
+                        'role': 'writer',
+                        'emailAddress': share_with_email
+                    }
+                    self.drive_service.permissions().create(
+                        fileId=sheet_id,
+                        body=permission
+                    ).execute()
+                except Exception as e:
+                    # Log but don't fail if sharing fails
+                    pass
+            
+            return {
+                'success': True,
+                'sheet_id': sheet_id,
+                'url': f"https://docs.google.com/spreadsheets/d/{sheet_id}",
+                'title': title
+            }
+        except HttpError as e:
+            return {'success': False, 'error': str(e)}
+    
+    def list_sheets(self, max_results: int = 50) -> list:
+        """List Google Sheets accessible by the service account"""
+        if not self.drive_service:
+            return []
+        
+        try:
+            results = self.drive_service.files().list(
+                q="mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+                pageSize=max_results,
+                fields="files(id, name, createdTime, modifiedTime, webViewLink)"
+            ).execute()
+            
+            sheets = results.get('files', [])
+            return [
+                {
+                    'id': sheet['id'],
+                    'name': sheet['name'],
+                    'url': sheet.get('webViewLink', f"https://docs.google.com/spreadsheets/d/{sheet['id']}"),
+                    'created': sheet.get('createdTime', ''),
+                    'modified': sheet.get('modifiedTime', '')
+                }
+                for sheet in sheets
+            ]
+        except HttpError as e:
+            return []
+    
+    def update_sheet_values(self, sheet_id: str, range_name: str, values: list) -> dict:
+        """Update values in a sheet"""
+        if not self.service:
+            return {'success': False, 'error': 'Sheets service not initialized'}
+        
+        try:
+            body = {
+                'values': values
+            }
+            result = self.service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range=range_name,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+            
+            return {
+                'success': True,
+                'updated_cells': result.get('updatedCells', 0)
+            }
+        except HttpError as e:
+            return {'success': False, 'error': str(e)}
+    
+    def get_sheet_info(self, sheet_id: str) -> dict:
+        """Get basic information about a sheet"""
+        if not self.service:
+            return None
+        
+        try:
+            result = self.service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            return {
+                'title': result['properties']['title'],
+                'sheet_id': sheet_id,
+                'url': f"https://docs.google.com/spreadsheets/d/{sheet_id}",
+                'sheets': [
+                    {
+                        'title': sheet['properties']['title'],
+                        'sheet_id': sheet['properties']['sheetId']
+                    }
+                    for sheet in result.get('sheets', [])
+                ]
+            }
+        except HttpError as e:
+            return None
+    
+    def is_configured(self) -> bool:
+        """Check if Google Sheets API is properly configured"""
+        return self.service is not None and self.drive_service is not None
+
+def load_google_credentials():
+    """Load Google credentials from config file"""
+    import os
+    credentials_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'google_credentials.json')
+    
+    if os.path.exists(credentials_path):
+        try:
+            with open(credentials_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
 
 def get_google_sheets_service():
-    """Get Google Sheets service from session state"""
+    """Get Google Sheets service from session state or config file"""
     try:
         import streamlit as st
         if 'google_sheets_service' not in st.session_state:
-            settings = st.session_state.get('settings', {})
-            credentials = settings.get('google_service_account', '')
+            # First, try to load from config file (admin settings)
+            credentials = load_google_credentials()
+            
             if credentials:
                 st.session_state.google_sheets_service = GoogleSheetsAPI(credentials)
             else:
-                # Try to get from database
-                from src.database import SessionLocal, Recruiter
-                if st.session_state.get('user'):
-                    db = SessionLocal()
-                    try:
-                        user_id = st.session_state.user['id']
-                        recruiter = db.query(Recruiter).filter(Recruiter.id == user_id).first()
-                        if recruiter and recruiter.storage_config:
-                            creds = recruiter.storage_config.get('google_service_account', '')
-                            if creds:
-                                st.session_state.google_sheets_service = GoogleSheetsAPI(creds)
+                # Fallback: try session state settings
+                settings = st.session_state.get('settings', {})
+                credentials = settings.get('google_service_account', '')
+                if credentials:
+                    st.session_state.google_sheets_service = GoogleSheetsAPI(credentials)
+                else:
+                    # Fallback: try database
+                    from src.database import SessionLocal, Recruiter
+                    if st.session_state.get('user'):
+                        db = SessionLocal()
+                        try:
+                            user_id = st.session_state.user['id']
+                            recruiter = db.query(Recruiter).filter(Recruiter.id == user_id).first()
+                            if recruiter and recruiter.storage_config:
+                                creds = recruiter.storage_config.get('google_service_account', '')
+                                if creds:
+                                    st.session_state.google_sheets_service = GoogleSheetsAPI(creds)
+                                else:
+                                    st.session_state.google_sheets_service = None
                             else:
                                 st.session_state.google_sheets_service = None
-                        else:
-                            st.session_state.google_sheets_service = None
-                    finally:
-                        db.close()
-                else:
-                    st.session_state.google_sheets_service = None
+                        finally:
+                            db.close()
+                    else:
+                        st.session_state.google_sheets_service = None
+        
+        # Refresh service if credentials file changed
+        if st.session_state.google_sheets_service:
+            credentials = load_google_credentials()
+            if credentials and st.session_state.google_sheets_service.credentials_json != credentials:
+                st.session_state.google_sheets_service = None
+                if credentials:
+                    st.session_state.google_sheets_service = GoogleSheetsAPI(credentials)
+        
         return st.session_state.google_sheets_service
-    except:
+    except Exception as e:
         return None
 

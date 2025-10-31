@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timedelta
 from src.database import SessionLocal, Assessment, Question, Invitation, Recruiter
 from src.utils.auth import check_auth
+from src.services.google_sheets import get_google_sheets_service
 
 def extract_sheet_id(sheet_url_or_id):
     """
@@ -217,6 +218,99 @@ def create_assessment_advanced(db, user_id):
 
     with left:
         st.markdown("#### Question Settings")
+        
+        # Google Sheets Integration Section
+        st.markdown("**Google Sheets Integration**")
+        google_sheets_service = get_google_sheets_service()
+        
+        if not google_sheets_service or not google_sheets_service.is_configured():
+            st.warning("⚠️ Google Sheets API not configured. Please configure credentials in Admin Settings.")
+            with st.expander("📋 Configure Google Sheets", expanded=False):
+                st.info("Go to **Admin Settings** page to upload your Google Cloud Console Service Account JSON file.")
+        else:
+            # Google Sheets Quick Actions
+            sheets_col1, sheets_col2 = st.columns(2)
+            with sheets_col1:
+                create_sheet_expanded = st.button("➕ Create New Sheet", use_container_width=True, help="Create a new Google Sheet")
+                if create_sheet_expanded:
+                    st.session_state.show_create_sheet = not st.session_state.get('show_create_sheet', False)
+            with sheets_col2:
+                list_sheets_clicked = st.button("📋 List My Sheets", use_container_width=True, help="View all your Google Sheets")
+                if list_sheets_clicked:
+                    st.session_state.show_sheets_list = not st.session_state.get('show_sheets_list', False)
+            
+            # Create new sheet form
+            if st.session_state.get('show_create_sheet', False):
+                with st.expander("➕ Create New Google Sheet", expanded=True):
+                    with st.form("create_sheet_form"):
+                        sheet_title = st.text_input("Sheet Title", value=f"Assessment Sheet - {datetime.now().strftime('%Y%m%d_%H%M%S')}", key="new_sheet_title")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            create_btn = st.form_submit_button("✅ Create", use_container_width=True)
+                        with col2:
+                            cancel_btn = st.form_submit_button("❌ Cancel", use_container_width=True)
+                        
+                        if cancel_btn:
+                            st.session_state.show_create_sheet = False
+                            st.rerun()
+                        
+                        if create_btn:
+                            if sheet_title:
+                                result = google_sheets_service.create_sheet(sheet_title)
+                                if result.get('success'):
+                                    st.session_state.preview_sheet_url = result['url']
+                                    st.session_state.current_sheet_url = result['url']
+                                    st.session_state.show_create_sheet = False
+                                    st.success(f"✅ Sheet created: {result['title']}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Error creating sheet: {result.get('error', 'Unknown error')}")
+                            else:
+                                st.warning("⚠️ Please enter a sheet title")
+            
+            # Show sheets list if requested
+            if st.session_state.get('show_sheets_list', False):
+                with st.expander("📋 My Google Sheets", expanded=True):
+                    sheets = google_sheets_service.list_sheets(max_results=20)
+                    if sheets:
+                        for sheet in sheets:
+                            col1, col2 = st.columns([3, 1])
+                            with col1:
+                                st.write(f"**{sheet['name']}**")
+                                st.caption(f"Created: {sheet['created'][:10] if sheet['created'] else 'N/A'}")
+                            with col2:
+                                if st.button("Use", key=f"use_sheet_{sheet['id']}", use_container_width=True):
+                                    st.session_state.preview_sheet_url = sheet['url']
+                                    st.session_state.current_sheet_url = sheet['url']
+                                    st.session_state.show_sheets_list = False
+                                    st.success(f"✅ Loaded: {sheet['name']}")
+                                    st.rerun()
+                    else:
+                        st.info("No Google Sheets found.")
+            
+            # Copy from template section
+            with st.expander("📄 Copy from Template", expanded=False):
+                template_sheet_url = st.text_input("Template Sheet URL", placeholder="Paste Google Sheet URL to copy from...", key="template_url")
+                new_sheet_name = st.text_input("New Sheet Name", placeholder="Name for the copied sheet...", key="template_name")
+                if st.button("📋 Copy Template", use_container_width=True):
+                    if template_sheet_url and new_sheet_name:
+                        template_id = extract_sheet_id(template_sheet_url)
+                        if template_id:
+                            result = google_sheets_service.copy_sheet(template_id, new_sheet_name)
+                            if result.get('success'):
+                                st.session_state.preview_sheet_url = result['url']
+                                st.session_state.current_sheet_url = result['url']
+                                st.success(f"✅ Sheet copied: {new_sheet_name}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Error copying sheet: {result.get('error', 'Unknown error')}")
+                        else:
+                            st.error("❌ Invalid template sheet URL")
+                    else:
+                        st.warning("⚠️ Please provide both template URL and new sheet name")
+        
+        st.markdown("---")
+        
         with st.form("question_builder_form"):
             st.markdown("**Question 01**")
             section_name = st.text_input("Section Name", placeholder="e.g., Excel Basics, Advanced Formulas")

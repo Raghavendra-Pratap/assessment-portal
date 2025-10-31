@@ -100,3 +100,7 @@ logs/
 *sensitive*
 *confidential*
 
+# Uploaded files
+static/logos/*
+!static/logos/.gitkeep
+

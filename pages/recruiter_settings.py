@@ -1,17 +1,59 @@
-"""Recruiter Settings - Personal settings for recruiters"""
+"""Settings - Dashboard customization for admins and recruiters"""
 
 import streamlit as st
 import json
 import os
+import re
+import hashlib
+from datetime import datetime
 from src.database import SessionLocal, Recruiter
 from src.utils.auth import hash_password
 
+def generate_dashboard_slug(company_name):
+    """
+    Generate a unique dashboard slug based on company name
+    One dashboard per organization
+    """
+    if not company_name:
+        return ''
+    
+    # Convert to lowercase, replace spaces/special chars with hyphens
+    slug = company_name.lower().strip()
+    slug = re.sub(r'[^a-z0-9]+', '-', slug)  # Replace non-alphanumeric with hyphens
+    slug = re.sub(r'-+', '-', slug)  # Replace multiple hyphens with single
+    slug = slug.strip('-')  # Remove leading/trailing hyphens
+    
+    # Ensure uniqueness within the organization
+    return slug
+
+def save_uploaded_logo(uploaded_file, company_name):
+    """Save uploaded logo file"""
+    if not uploaded_file:
+        return None
+    
+    # Create uploads directory
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'logos')
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # Generate filename based on company name
+    file_ext = os.path.splitext(uploaded_file.name)[1]
+    safe_company = re.sub(r'[^a-zA-Z0-9]+', '_', company_name.lower())
+    filename = f"{safe_company}_{int(datetime.now().timestamp())}{file_ext}"
+    filepath = os.path.join(uploads_dir, filename)
+    
+    # Save file
+    with open(filepath, 'wb') as f:
+        f.write(uploaded_file.getbuffer())
+    
+    # Return relative path for URL
+    return f"/static/logos/{filename}"
+
 def render():
-    """Render recruiter settings page"""
+    """Render settings page for dashboard customization"""
     st.title("⚙️ Settings")
     st.markdown("---")
     
-    # Get current user
+    # Get current user (both admins and recruiters)
     user = st.session_state.get('user', {})
     user_id = user.get('id')
     
@@ -23,45 +65,209 @@ def render():
     try:
         recruiter = db.query(Recruiter).filter(Recruiter.id == user_id).first()
         if not recruiter:
-            st.error("❌ Recruiter not found.")
+            st.error("❌ User not found.")
             return
         
-        # Personal Information Section
-        st.subheader("👤 Personal Information")
-        
-        with st.expander("Profile Settings", expanded=True):
-            with st.form("profile_form"):
-                col1, col2 = st.columns(2)
+        # Combined Profile and Branding Settings in one form
+        with st.form("dashboard_settings_form"):
+            # Profile Section
+            st.subheader("📋 Profile")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                name = st.text_input("Name *", value=recruiter.name, placeholder="Enter your name")
+            
+            with col2:
+                email = st.text_input("Email *", value=recruiter.email, placeholder="your.email@company.com")
+            
+            company = st.text_input("Company *", value=recruiter.company or '', placeholder="Enter your company name")
+            
+            # Auto-generate dashboard slug from company name
+            # One dashboard per organization - all users with same company share the same dashboard
+            if company:
+                auto_slug = generate_dashboard_slug(company)
                 
+                # Check if another user from the same organization already has this slug
+                existing_org = db.query(Recruiter).filter(
+                    Recruiter.company == company,
+                    Recruiter.id != user_id
+                ).first()
+                
+                if existing_org:
+                    # Use the existing organization's dashboard slug
+                    auto_slug = existing_org.dashboard_slug
+                # If no existing org member, use the generated slug
+            else:
+                auto_slug = recruiter.dashboard_slug or ''
+            
+            # Dashboard URL (read-only, auto-generated)
+            if auto_slug:
+                dashboard_url = f"/dashboard/{auto_slug}"
+                st.info(f"**Dashboard URL:** `{dashboard_url}`")
+                st.caption("This URL is automatically generated from your company name. **All users in the same organization share this dashboard.** One dashboard per organization.")
+                
+                # Show if sharing with other users
+                org_members = db.query(Recruiter).filter(
+                    Recruiter.company == company,
+                    Recruiter.id != user_id
+                ).count()
+                
+                if org_members > 0:
+                    st.success(f"✅ Sharing dashboard with {org_members} other user(s) from {company}")
+            else:
+                st.warning("⚠️ Enter a company name to generate your dashboard URL")
+            
+            st.markdown("---")
+            
+            # Branding Section
+            st.subheader("🎨 Branding")
+            
+            # Load existing branding settings
+            branding = recruiter.branding_settings or {}
+            
+            # Logo upload
+            st.markdown("#### Logo")
+            logo_url = branding.get('logo_url', '')
+            
+            # Display current logo if exists
+            if logo_url:
+                col1, col2 = st.columns([1, 3])
                 with col1:
-                    name = st.text_input("Name *", value=recruiter.name)
-                    email = st.text_input("Email *", value=recruiter.email)
-                
-                with col2:
-                    company = st.text_input("Company", value=recruiter.company or '')
-                    dashboard_slug = st.text_input("Dashboard Slug", value=recruiter.dashboard_slug)
-                
-                if st.form_submit_button("Update Profile", type="primary"):
-                    if not name or not email:
-                        st.error("Please fill in all required fields.")
-                    else:
-                        # Check if email is already taken by another user
-                        existing = db.query(Recruiter).filter(Recruiter.email == email, Recruiter.id != user_id).first()
-                        if existing:
-                            st.error("Email already taken by another user.")
+                    if logo_url.startswith('/static/'):
+                        # Local file
+                        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), logo_url.lstrip('/'))
+                        if os.path.exists(logo_path):
+                            st.image(logo_path, width=200)
                         else:
-                            recruiter.name = name
-                            recruiter.email = email
-                            recruiter.company = company
-                            recruiter.dashboard_slug = dashboard_slug
-                            db.commit()
-                            st.success("Profile updated successfully!")
-                            # Update session state
-                            st.session_state.user['name'] = name
-                            st.session_state.user['email'] = email
-                            st.session_state.user['company'] = company
-                            st.session_state.user['dashboard_slug'] = dashboard_slug
-                            st.rerun()
+                            st.info("Logo not found")
+                    else:
+                        # External URL
+                        st.image(logo_url, width=200)
+                with col2:
+                    st.caption(f"Current logo: {logo_url}")
+            else:
+                st.info("No logo uploaded")
+            
+            # Logo file uploader
+            uploaded_logo = st.file_uploader(
+                "Choose logo file",
+                type=['png', 'jpg', 'jpeg', 'svg'],
+                help="Upload a logo image (PNG, JPG, SVG). Recommended size: 200x100px or similar aspect ratio."
+            )
+            
+            if uploaded_logo:
+                st.caption(f"Selected file: {uploaded_logo.name}")
+                # Preview uploaded logo
+                if uploaded_logo.type.startswith('image/'):
+                    st.image(uploaded_logo, width=200)
+            
+            # Colors
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                primary_color = st.color_picker(
+                    "Primary Color",
+                    value=branding.get('primary_color', '#667eea'),
+                    help="Main color for your dashboard"
+                )
+            
+            with col2:
+                secondary_color = st.color_picker(
+                    "Secondary Color",
+                    value=branding.get('secondary_color', '#764ba2'),
+                    help="Secondary color for your dashboard"
+                )
+            
+            # Action buttons
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                submitted = st.form_submit_button("💾 Save Settings", type="primary", use_container_width=True)
+            with col2:
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.rerun()
+            
+            if submitted:
+                errors = []
+                
+                # Validate required fields
+                if not name:
+                    errors.append("Name is required.")
+                if not email:
+                    errors.append("Email is required.")
+                if not company:
+                    errors.append("Company name is required to generate dashboard URL.")
+                
+                # Check if email already exists
+                if email != recruiter.email:
+                    existing = db.query(Recruiter).filter(Recruiter.email == email, Recruiter.id != user_id).first()
+                    if existing:
+                        errors.append("Email already taken by another user.")
+                
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    # Recalculate dashboard slug based on final company name
+                    # One dashboard per organization - all users with same company share same dashboard
+                    final_slug = generate_dashboard_slug(company)
+                    
+                    # Check if another user from the same organization already exists
+                    existing_org_user = db.query(Recruiter).filter(
+                        Recruiter.company == company,
+                        Recruiter.id != user_id
+                    ).first()
+                    
+                    if existing_org_user:
+                        # Join existing organization's dashboard
+                        final_slug = existing_org_user.dashboard_slug
+                    # If no existing org member, use the generated slug
+                    
+                    # Save logo if uploaded
+                    new_logo_url = logo_url
+                    if uploaded_logo:
+                        saved_logo_path = save_uploaded_logo(uploaded_logo, company)
+                        if saved_logo_path:
+                            new_logo_url = saved_logo_path
+                    
+                    # Update recruiter
+                    recruiter.name = name
+                    recruiter.email = email
+                    recruiter.company = company
+                    recruiter.dashboard_slug = final_slug  # Auto-generated from company, shared with org
+                    
+                    # Update branding settings
+                    branding_settings = {
+                        'primary_color': primary_color,
+                        'secondary_color': secondary_color,
+                        'logo_url': new_logo_url,
+                        'favicon_url': branding.get('favicon_url', ''),
+                        'welcome_message': branding.get('welcome_message', '')
+                    }
+                    recruiter.branding_settings = branding_settings
+                    
+                    db.commit()
+                    
+                    # Update session state
+                    st.session_state.user['name'] = name
+                    st.session_state.user['email'] = email
+                    st.session_state.user['company'] = company
+                    st.session_state.user['dashboard_slug'] = final_slug
+                    
+                    # Show organization sharing info
+                    org_members_count = db.query(Recruiter).filter(
+                        Recruiter.company == company,
+                        Recruiter.id != user_id
+                    ).count()
+                    
+                    st.success("✅ Settings saved successfully!")
+                    st.info(f"📊 Your dashboard is available at: `/dashboard/{final_slug}`")
+                    
+                    if org_members_count > 0:
+                        st.success(f"✅ Sharing dashboard with {org_members_count} other user(s) from {company}")
+                    else:
+                        st.info(f"ℹ️ You're the first user from {company}. Other users from your organization will automatically join this dashboard.")
+                    st.rerun()
         
         st.markdown("---")
         
@@ -90,118 +296,6 @@ def render():
                             recruiter.password_hash = hash_password(new_password)
                             db.commit()
                             st.success("Password changed successfully!")
-        
-        st.markdown("---")
-        
-        # Branding Settings Section
-        st.subheader("🎨 Branding")
-        
-        with st.expander("Customize Your Branding", expanded=True):
-            # Load existing branding settings
-            branding = recruiter.branding_settings or {}
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                primary_color = st.color_picker(
-                    "Primary Color",
-                    value=branding.get('primary_color', '#2563eb'),
-                    help="Main color for your assessment interface"
-                )
-                
-                logo_url = st.text_input(
-                    "Logo URL",
-                    value=branding.get('logo_url', ''),
-                    help="URL to your company logo"
-                )
-            
-            with col2:
-                secondary_color = st.color_picker(
-                    "Secondary Color",
-                    value=branding.get('secondary_color', '#64748b'),
-                    help="Secondary color for your assessment interface"
-                )
-                
-                favicon_url = st.text_input(
-                    "Favicon URL",
-                    value=branding.get('favicon_url', ''),
-                    help="URL to your favicon"
-                )
-            
-            welcome_message = st.text_area(
-                "Welcome Message",
-                value=branding.get('welcome_message', ''),
-                help="Custom message shown to candidates",
-                height=100
-            )
-            
-            if st.button("Save Branding Settings", type="primary"):
-                branding_settings = {
-                    'primary_color': primary_color,
-                    'secondary_color': secondary_color,
-                    'logo_url': logo_url,
-                    'favicon_url': favicon_url,
-                    'welcome_message': welcome_message
-                }
-                
-                recruiter.branding_settings = branding_settings
-                db.commit()
-                st.success("Branding settings saved successfully!")
-        
-        st.markdown("---")
-        
-        # Assessment Preferences Section
-        st.subheader("📝 Assessment Preferences")
-        
-        with st.expander("Default Assessment Settings", expanded=True):
-            # Load existing storage config
-            storage_config = recruiter.storage_config or {}
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                default_duration = st.number_input(
-                    "Default Duration (minutes)",
-                    min_value=5,
-                    max_value=480,
-                    value=storage_config.get('default_duration', 60),
-                    help="Default time limit for your assessments"
-                )
-                
-                default_attempts = st.number_input(
-                    "Default Max Attempts",
-                    min_value=1,
-                    max_value=10,
-                    value=storage_config.get('default_attempts', 1),
-                    help="Default maximum attempts for your assessments"
-                )
-            
-            with col2:
-                default_proctoring = st.selectbox(
-                    "Default Proctoring Level",
-                    ['basic', 'standard', 'strict'],
-                    index=['basic', 'standard', 'strict'].index(storage_config.get('default_proctoring', 'standard')),
-                    help="Default proctoring settings for your assessments"
-                )
-                
-                default_grading = st.selectbox(
-                    "Default Grading Mode",
-                    ['auto', 'manual', 'hybrid'],
-                    index=['auto', 'manual', 'hybrid'].index(storage_config.get('default_grading', 'auto')),
-                    help="Default grading mode for your assessments"
-                )
-            
-            if st.button("Save Assessment Preferences", type="primary"):
-                storage_config.update({
-                    'default_duration': default_duration,
-                    'default_attempts': default_attempts,
-                    'default_proctoring': default_proctoring,
-                    'default_grading': default_grading
-                })
-                
-                recruiter.storage_config = storage_config
-                db.commit()
-                st.success("Assessment preferences saved successfully!")
         
         st.markdown("---")
         

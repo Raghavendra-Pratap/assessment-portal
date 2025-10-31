@@ -65,12 +65,7 @@ def main():
             # For now, redirect to sessions - we'll create candidates page later
             admin_sessions.render()
         elif st.session_state.page == 'settings':
-            # Settings page is only for recruiters - admins use "Admin Settings" instead
-            # If admin somehow reaches this page, redirect to admin_settings
-            if st.session_state.get('user', {}).get('is_admin', False):
-                st.warning("⚠️ Admins should use 'Admin Settings' instead. Redirecting...")
-                st.session_state.page = 'admin_settings'
-                st.rerun()
+            # Settings page is for dashboard customization - accessible to both admins and recruiters
             recruiter_settings.render()
         elif st.session_state.page == 'admin_panel':
             # Only admins can access admin panel - redirect non-admins

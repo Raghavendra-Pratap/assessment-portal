@@ -17,11 +17,11 @@ def render_navbar():
     is_admin = user.get('is_admin', False)
     
     if is_admin:
-        # Admin navigation - admins use "Admin Settings", not regular "Settings"
-        col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 1, 1, 1, 1, 1, 2])
-        nav_cols = [col2, col3, col4, col5, col6]
-        nav_pages = ['dashboard', 'assessments', 'candidates', 'admin_panel', 'admin_settings']
-        nav_labels = ['Dashboard', 'Assessments', 'Candidates', 'Admin Panel', 'Admin Settings']
+        # Admin navigation - admins have both "Settings" (dashboard customization) and "Admin Settings" (system config)
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([2, 1, 1, 1, 1, 1, 1, 2])
+        nav_cols = [col2, col3, col4, col5, col6, col7]
+        nav_pages = ['dashboard', 'assessments', 'candidates', 'admin_panel', 'settings', 'admin_settings']
+        nav_labels = ['Dashboard', 'Assessments', 'Candidates', 'Admin Panel', 'Settings', 'Admin Settings']
     else:
         # Regular recruiter navigation
         col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 1, 2])
@@ -53,7 +53,7 @@ def render_navbar():
                 st.rerun()
     
     # User info and logout
-    user_col = col7 if is_admin else col6
+    user_col = col8 if is_admin else col6
     with user_col:
         user_col1, user_col2 = st.columns([4, 1])
         with user_col1:

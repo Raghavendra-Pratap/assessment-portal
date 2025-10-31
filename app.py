@@ -25,8 +25,52 @@ st.set_page_config(
     page_title="Excel Assessment Pro",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    menu_items=None  # Hide menu items
 )
+
+# Hide sidebar completely using CSS
+hide_sidebar_css = """
+<style>
+    /* Hide the entire sidebar */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    
+    /* Adjust main content area when sidebar is hidden */
+    [data-testid="stSidebar"] ~ div {
+        margin-left: 0 !important;
+    }
+    
+    /* Hide hamburger menu button that toggles sidebar */
+    button[data-testid="baseButton-header"] {
+        display: none !important;
+    }
+    
+    /* Hide Streamlit's default navigation menu */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* Ensure main content takes full width */
+    .main .block-container {
+        padding-left: 2rem;
+        padding-right: 2rem;
+        max-width: 100%;
+    }
+    
+    /* Hide footer menu */
+    footer {
+        display: none !important;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {
+        visibility: hidden;
+    }
+</style>
+"""
+st.markdown(hide_sidebar_css, unsafe_allow_html=True)
 
 # Initialize database
 init_db()
